@@ -1,11 +1,14 @@
 {
-  "name": "my-custom-js-converter",
-  "version": "0.0.1",
-  "description": "自代码转换器",
+  "name": "@kezh/my-custom-js-converter",
+  "version": "0.0.7",
+  "description": "自定义代码转换器",
   "main": "index.js",
+  "bin": {
+    "encode": "core/encode.js",
+    "decode": "core/decode.js"
+  },
   "scripts": {
-    "encode": "node ./core/encode.js",
-    "decode": "node ./core/decode.js"
+    "build": "npx tsc --build"
   },
   "author": "shahow",
   "license": "MIT",
@@ -18,13 +21,15 @@
     "@babel/generator": "^7.18.13",
     "@babel/parser": "^7.18.13",
     "@babel/traverse": "^7.18.13",
-    "@babel/types": "^7.18.13"
+    "@babel/types": "^7.18.13",
+    "prettier": "^2.7.1"
   },
   "devDependencies": {
     "@types/babel__core": "^7.1.19",
     "@types/babel__generator": "^7.6.4",
     "@types/babel__traverse": "^7.18.1",
     "@types/node": "^18.7.14",
+    "@types/prettier": "^2.7.0",
     "typescript": "^4.8.2"
   }
 }

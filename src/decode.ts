@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import prettier from 'prettier';
 import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
 import generate from "@babel/generator";
@@ -40,7 +41,12 @@ function decoding$0(inPath: string, outPath: string, mount: string = MOUNT) {
   const srcAst = parse(src);
   importMods(path.dirname(outPath), customConfig.mod, srcAst);
   deleteModMethods(customConfig.mod, srcAst);
-  const { code: dist } = generate(srcAst);
+  let { code: dist } = generate(srcAst);
+  dist = dist.replace(/},\n\n/g, '},\n');
+  dist = prettier.format(dist, {
+    parser: 'babel',
+    trailingComma: 'none'
+  });
   fs.writeFileSync(outPath, dist, "utf-8");
 }
 
