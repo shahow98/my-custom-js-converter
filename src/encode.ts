@@ -13,7 +13,8 @@ import {
   ObjectExpression,
   ObjectMethod,
   StringLiteral,
-  VariableDeclarator
+  VariableDeclarator,
+  VariableDeclaration
 } from "@babel/types";
 const TARGET_DIR = scanfCodeDirs(config.baseDir, config.target);
 const ENCODE_FILE = config.encode.file;
@@ -98,21 +99,36 @@ function getImportMethods(
       return [];
     }
     const modMethodNames = modMethods.map((m) => (m.key as Identifier).name);
+    // console.log(`mod methods => ${modMethodNames}`);
     const useMethodNames = methodNamesByMod.get(name) as string[];
+    // console.log(`use methods => ${useMethodNames}`);
     const inlineMethodNames = getInlineThisMethodNames(
       modMethodNames,
       useMethodNames,
       modAst
     );
+    // console.log(`inline methods => ${inlineMethodNames}`);
     let mergeMethodNames = [
       ...new Set([...useMethodNames, ...inlineMethodNames])
     ];
     modifyModMethods(name, mergeMethodNames, modAst);
-    mergeMethodNames = mergeMethodNames.map((m) => `${m}__${name}`);
-    const mergeMethods = modMethods
-      .filter((m) => types.isIdentifier(m.key))
-      .filter((m) => mergeMethodNames.includes((m.key as Identifier).name));
+    // console.log(generate(modAst).code);
+    const mergeMethods: ObjectMethod[] = mergeMethodNames
+      .map((name) => {
+        return modMethods.find(
+          (m) =>
+            types.isIdentifier(m.key) && (m.key as Identifier).name === name
+        );
+      })
+      .filter((m) => m) as ObjectMethod[];
+    // console.log(`inline methods size => ${inlineMethodNames.length}`);
+    // console.log(`import methods size => ${mergeMethods.length}`);
     return mergeMethods.map((m) => {
+      if(types.isIdentifier(m.key)) {
+        const key = m.key as Identifier;
+        key.name = `${key.name}__${name}`;
+      }
+      
       m.body = types.addComment(
         m.body,
         "inner",
@@ -138,7 +154,6 @@ function getInlineThisMethodNames(
   if (!useMethodNames.length) {
     return [];
   }
-
   const thisMethodNames = new Set<string>();
   traverse(modAst, {
     ThisExpression(path) {
@@ -163,8 +178,10 @@ function getInlineThisMethodNames(
       }
     }
   });
-
-  return [...thisMethodNames];
+  return [
+    ...thisMethodNames,
+    ...getInlineThisMethodNames(modMethodNames, [...thisMethodNames], modAst)
+  ];
 }
 
 /**
@@ -259,6 +276,7 @@ function getSrcMethodNames(entry: string, srcAst?: Node | Node[]): string[] {
 
 /**
  * 获取源码入口对象所有方法
+ * todo: 重复获取方法
  * @param entry - 入口对象
  * @param ast - AST
  * @returns
@@ -266,15 +284,31 @@ function getSrcMethodNames(entry: string, srcAst?: Node | Node[]): string[] {
 function getMethods(entry: string, ast?: Node | Node[]): ObjectMethod[] {
   const methods: ObjectMethod[] = [];
   traverse(ast, {
-    Identifier(path) {
-      if (path.node.name === entry) {
-        const declarator = path.findParent((path) =>
-          path.isVariableDeclarator()
-        ) as NodePath<VariableDeclarator> | null;
-        const methodBody = declarator?.node.init as ObjectExpression | null;
-        const inlineMethods = methodBody?.properties as ObjectMethod[] | null;
-        inlineMethods?.length && methods.push(...inlineMethods);
-      }
+    Program(path) {
+      path.node.body.forEach((statement) => {
+        if (types.isVariableDeclaration(statement)) {
+          const variableDeclaration = statement as VariableDeclaration;
+          variableDeclaration.declarations
+            .filter((declaration) => {
+              if (types.isIdentifier(declaration.id)) {
+                const id = declaration.id as Identifier;
+                if (id.name === entry) {
+                  return true;
+                }
+              }
+              return false;
+            })
+            .forEach((declaration) => {
+              if (types.isObjectExpression(declaration.init)) {
+                const init = declaration.init as ObjectExpression;
+                const objectMethods = init.properties.filter((property) =>
+                  types.isObjectMethod(property)
+                ) as ObjectMethod[];
+                methods.push(...objectMethods);
+              }
+            });
+        }
+      });
     }
   });
   return methods;
@@ -337,31 +371,17 @@ function modifyModMethods(
 ) {
   traverse(modAst, {
     MemberExpression(path) {
-      const objectMethod = path.findParent((path) =>
-        path.isObjectMethod()
-      ) as NodePath<ObjectMethod> | null;
-      if (!types.isIdentifier(objectMethod?.node.key)) {
-        return;
+      if (types.isIdentifier(path.node.property)) {
+        const property = path.node.property as Identifier;
+        if (methodNames.includes(property.name)) {
+          if (
+            types.isIdentifier(path.node.object) ||
+            types.isThisExpression(path.node.object)
+          ) {
+            property.name = `${property.name}__${mod}`;
+          }
+        }
       }
-      if (!methodNames.includes((objectMethod?.node.key as Identifier).name)) {
-        return;
-      }
-      const key = objectMethod?.node.key as Identifier;
-      key.name =
-        key.name.lastIndexOf(`__${mod}`) === -1
-          ? `${key.name}__${mod}`
-          : key.name;
-      if (!types.isThisExpression(path.node.object)) {
-        return;
-      }
-      if (!types.isIdentifier(path.node.property)) {
-        return;
-      }
-      const property = path.node.property as Identifier;
-      if (!methodNames.includes(property.name)) {
-        return;
-      }
-      property.name = `${property.name}__${mod}`;
     }
   });
 }
