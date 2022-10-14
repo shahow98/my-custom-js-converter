@@ -5,7 +5,7 @@ import traverse, { NodePath } from "@babel/traverse";
 import generate from "@babel/generator";
 import { Node, types } from "@babel/core";
 import { scanfCodeFiles, scanfCodeDirs, scanfRequieMod } from "./scanf";
-import config, { Config } from "./config";
+import config from "./config";
 import {
   CallExpression,
   Identifier,
@@ -16,7 +16,7 @@ import {
   VariableDeclarator,
   VariableDeclaration
 } from "@babel/types";
-import { env } from "process";
+import { Mod, SubConfig } from "./config/sub_config";
 const TARGET_DIR = scanfCodeDirs(config.baseDir, config.target);
 const ENCODE_FILE = config.encode.file;
 const OUTPUT_FILE = config.encode.output;
@@ -410,19 +410,19 @@ function refreshCustomConfig(
   custConfig: string = CUSTOM_CONFIG
 ) {
   const configPath = path.join(inPath, workDir, custConfig);
-  let configObj: Config.SubConfig = {
+  let configObj: SubConfig = {
     mod: []
   };
   try {
     mkWorkDir(inPath);
     fs.accessSync(configPath, fs.constants.F_OK);
     const data = fs.readFileSync(configPath, { encoding: "utf-8" });
-    configObj = JSON.parse(data) as Config.SubConfig;
+    configObj = JSON.parse(data) as SubConfig;
   } catch (err) {
     console.log(`not found custom config => ${configPath}`);
   }
   configObj.mod = [...modPathByName.entries()].map(
-    ([key, value]) => new Config.Mod(key, value)
+    ([key, value]) => new Mod(key, value)
   );
   fs.writeFileSync(configPath, JSON.stringify(configObj, null, 4), "utf-8");
 }

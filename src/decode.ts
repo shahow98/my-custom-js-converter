@@ -7,7 +7,8 @@ import generate from "@babel/generator";
 import { Identifier, MemberExpression } from "@babel/types";
 import { Node, types } from "@babel/core";
 import { scanfCodeDirs, scanfCodeFiles } from "./scanf";
-import config, { Config } from "./config";
+import config from "./config";
+import { Mod, SubConfig } from "./config/sub_config";
 const TARGET_DIR = scanfCodeDirs(config.baseDir, config.target);
 const DECODE_FILE = config.decode.file;
 const OUTPUT_FILE = config.decode.output;
@@ -53,7 +54,7 @@ function decoding$0(inPath: string, outPath: string, mount: string = MOUNT) {
 
 function importMods(
   outDir: string,
-  mods: Config.Mod[],
+  mods: Mod[],
   srcAst?: Node | Node[]
 ) {
   const importMods = mods.map((mod) => {
@@ -80,7 +81,7 @@ function importMods(
  * 去除第三方模块方法
  * @param srcAst - 源码AST
  */
-function deleteModMethods(mods: Config.Mod[], srcAst?: Node | Node[]) {
+function deleteModMethods(mods: Mod[], srcAst?: Node | Node[]) {
   const modNames = mods.map((m) => m.name);
   traverse(srcAst, {
     ObjectMethod(path) {
@@ -117,16 +118,16 @@ function loadCustomConfig(
   inPath: string,
   workDir: string = WORK_DIR,
   config: string = CUSTOM_CONFIG
-): Config.SubConfig {
+): SubConfig {
   const configPath = path.join(inPath, workDir, config);
-  let configObj: Config.SubConfig = {
+  let configObj: SubConfig = {
     mod: [],
   };
   try {
     fs.accessSync(configPath, fs.constants.F_OK);
     console.log(`load custom config => ${configPath}`);
     const data = fs.readFileSync(configPath, { encoding: "utf-8" });
-    configObj = JSON.parse(data) as Config.SubConfig;
+    configObj = JSON.parse(data) as SubConfig;
     configObj.mod.forEach((m) => {
       m.name = m.name.replace("\\", "\\\\");
     });
