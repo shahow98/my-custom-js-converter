@@ -1,4 +1,5 @@
 import fs from "fs";
+import { type } from "os";
 import path from "path";
 
 export default config();
@@ -9,12 +10,12 @@ export namespace Config {
     decode: DecodeConfig;
     baseDir: string;
     target: string[];
+    workDir: string;
     customConfig: string;
   }
 
   export interface SubConfig {
     mod: Array<Mod>;
-    version: string;
   }
 
   export interface EncodeConfig {
@@ -40,7 +41,6 @@ export namespace Config {
   }
 }
 
-
 function config(): Config.MainConfig {
   const defConfig: Config.MainConfig = {
     encode: {
@@ -56,6 +56,7 @@ function config(): Config.MainConfig {
     },
     baseDir: "",
     target: [""],
+    workDir: ".setting",
     customConfig: "config.json",
   };
 
@@ -67,9 +68,11 @@ function config(): Config.MainConfig {
     const json = fs.readFileSync(configPath, { encoding: "utf-8" });
     const customConfig = JSON.parse(json) as Config.MainConfig;
     defConfig.baseDir = baseDir;
-    defConfig.target = customConfig.target;
-    defConfig.encode = customConfig.encode;
-    defConfig.decode = customConfig.decode;
+    Object.keys(customConfig).map(key => key as keyof typeof customConfig).forEach((key) => {
+      if(customConfig[key]) {
+        defConfig[key] = customConfig[key] as any;
+      }
+    });
   } catch (err) {}
   return defConfig;
 }

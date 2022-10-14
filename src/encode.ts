@@ -16,11 +16,13 @@ import {
   VariableDeclarator,
   VariableDeclaration
 } from "@babel/types";
+import { env } from "process";
 const TARGET_DIR = scanfCodeDirs(config.baseDir, config.target);
 const ENCODE_FILE = config.encode.file;
 const OUTPUT_FILE = config.encode.output;
 const ENTRY = config.encode.entry;
 const IGNORE_MOD = config.encode.ignoreMod;
+const WORK_DIR = config.workDir;
 const CUSTOM_CONFIG = config.customConfig;
 
 (function encoding(targetDirs: string[] = TARGET_DIR) {
@@ -46,6 +48,12 @@ function encoding$0(inPath: string, outPath: string) {
   });
   const srcAst = parse(src);
   const methods: ObjectMethod[] = [];
+
+  const customMethodNames = getSrcMethodNames(ENTRY, srcAst);
+  if(!customMethodNames.length){
+    console.log(`not found entry => ${ENTRY}`);
+    return;
+  }
   const importModPathByName = getImportModPaths(path.dirname(inPath), srcAst);
   const importMethodNamesByMod = getImportMethodNames(
     [...importModPathByName.keys()],
@@ -56,7 +64,6 @@ function encoding$0(inPath: string, outPath: string) {
     importMethodNamesByMod
   );
 
-  const customMethodNames = getSrcMethodNames(ENTRY, srcAst);
   modifyCallObjectAndMethodNames(
     customMethodNames,
     [...importModPathByName.keys()],
@@ -90,8 +97,12 @@ function getImportMethods(
   modPathByName: Map<string, string>,
   methodNamesByMod: Map<string, string[]>
 ): ObjectMethod[] {
+  const importModNames = [...modPathByName.entries()].map(([name]) => name);
+  if(!importModNames.length) {
+    return [];
+  }
+  console.log(`import => ${importModNames}`);
   return [...modPathByName.entries()].flatMap(([name, modPath]) => {
-    console.log(`import => ${name}`);
     const mod = fs.readFileSync(modPath, { encoding: "utf-8" });
     const modAst = parse(mod);
     const modMethods = getMethods(name, modAst);
@@ -378,6 +389,12 @@ function modifyModMethods(
             types.isIdentifier(path.node.object) ||
             types.isThisExpression(path.node.object)
           ) {
+            if(types.isIdentifier(path.node.object)) {
+              const object = path.node.object as Identifier;
+              if(object.name !== mod) {
+                return;
+              }
+            }
             property.name = `${property.name}__${mod}`;
           }
         }
@@ -389,14 +406,15 @@ function modifyModMethods(
 function refreshCustomConfig(
   modPathByName: Map<string, string>,
   inPath: string,
-  config: string = CUSTOM_CONFIG
+  workDir: string = WORK_DIR,
+  custConfig: string = CUSTOM_CONFIG
 ) {
-  const configPath = path.join(inPath, config);
+  const configPath = path.join(inPath, workDir, custConfig);
   let configObj: Config.SubConfig = {
-    mod: [],
-    version: ""
+    mod: []
   };
   try {
+    mkWorkDir(inPath);
     fs.accessSync(configPath, fs.constants.F_OK);
     const data = fs.readFileSync(configPath, { encoding: "utf-8" });
     configObj = JSON.parse(data) as Config.SubConfig;
@@ -407,4 +425,13 @@ function refreshCustomConfig(
     ([key, value]) => new Config.Mod(key, value)
   );
   fs.writeFileSync(configPath, JSON.stringify(configObj, null, 4), "utf-8");
+}
+
+function mkWorkDir(inPath:string, workDir: string=WORK_DIR) {
+  const workDirPath = path.join(inPath, workDir);
+  try {
+    fs.accessSync(workDirPath);
+  } catch(err) {
+    fs.mkdirSync(workDirPath);
+  }
 }

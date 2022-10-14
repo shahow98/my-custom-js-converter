@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import prettier from 'prettier';
+import prettier from "prettier";
 import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
 import generate from "@babel/generator";
@@ -12,6 +12,7 @@ const TARGET_DIR = scanfCodeDirs(config.baseDir, config.target);
 const DECODE_FILE = config.decode.file;
 const OUTPUT_FILE = config.decode.output;
 const MOUNT = config.decode.mount;
+const WORK_DIR = config.workDir;
 const CUSTOM_CONFIG = config.customConfig;
 
 (function decoding(targetDirs: string[] = TARGET_DIR) {
@@ -42,10 +43,10 @@ function decoding$0(inPath: string, outPath: string, mount: string = MOUNT) {
   importMods(path.dirname(outPath), customConfig.mod, srcAst);
   deleteModMethods(customConfig.mod, srcAst);
   let { code: dist } = generate(srcAst);
-  dist = dist.replace(/},\n\n/g, '},\n');
+  dist = dist.replace(/},\n\n/g, "},\n");
   dist = prettier.format(dist, {
-    parser: 'babel',
-    trailingComma: 'none'
+    parser: "babel",
+    trailingComma: "none"
   });
   fs.writeFileSync(outPath, dist, "utf-8");
 }
@@ -56,7 +57,9 @@ function importMods(
   srcAst?: Node | Node[]
 ) {
   const importMods = mods.map((mod) => {
-    const requireFrom = path.relative(outDir, mod.path.replace(/index\.js$/, '')).replace(/[\\]+/g, '/');
+    const requireFrom = path
+      .relative(outDir, mod.path.replace(/index\.js$/, ""))
+      .replace(/[\\]+/g, "/");
     const variableDeclarator = types.variableDeclarator(
       types.identifier(mod.name),
       types.callExpression(types.identifier("require"), [
@@ -112,12 +115,12 @@ function deleteModMethods(mods: Config.Mod[], srcAst?: Node | Node[]) {
 
 function loadCustomConfig(
   inPath: string,
+  workDir: string = WORK_DIR,
   config: string = CUSTOM_CONFIG
 ): Config.SubConfig {
-  const configPath = path.join(inPath, config);
+  const configPath = path.join(inPath, workDir, config);
   let configObj: Config.SubConfig = {
     mod: [],
-    version: ""
   };
   try {
     fs.accessSync(configPath, fs.constants.F_OK);
