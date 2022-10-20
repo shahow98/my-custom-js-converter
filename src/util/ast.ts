@@ -17,6 +17,7 @@ import { scanfCodeFiles, scanfCodeDirs, scanfRequieMod } from "../scanf";
 import { Mod } from "../config/map_config";
 import { MapContext } from "../context/map_context";
 import { relative } from "path";
+import { AstPath } from "prettier";
 
 type AstType = Node | Node[] | null | undefined;
 
@@ -330,6 +331,53 @@ export function modifyObjectMethods(
   });
 }
 
+export function getDependentMethodNames(
+  srcAst: AstType,
+  methodNames: string[],
+  depNames: string[]
+) {
+  const methodNamesByDepName = new Map<string, string[]>();
+  traverse(srcAst, {
+    MemberExpression(path) {
+      const objectMethodNode = path.findParent((path) =>
+        types.isObjectMethod(path)
+      ) as NodePath<ObjectMethod> | null;
+      if (!types.isIdentifier(objectMethodNode?.node.key)) {
+        return;
+      }
+
+      if (!methodNames.includes(objectMethodNode!.node.key.name)) {
+        return;
+      }
+
+      if (
+        !(
+          types.isIdentifier(path.node.object) &&
+          types.isIdentifier(path.node.property)
+        )
+      ) {
+        return;
+      }
+
+      if (depNames.includes(path.node.object.name)) {
+        const depName = path.node.object.name;
+        if (!methodNamesByDepName.has(depName)) {
+          methodNamesByDepName.set(depName, []);
+        }
+        methodNamesByDepName.get(depName)?.push(path.node.property.name);
+      }
+    }
+  });
+  return methodNamesByDepName;
+}
+
+/**
+ * 生成导入语句
+ * const mod = require($modPath);
+ * @param outDir
+ * @param srcAst
+ * @param mapContext
+ */
 export function importMods(
   outDir: string,
   srcAst: AstType,

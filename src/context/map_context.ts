@@ -6,7 +6,8 @@ import {
   getRequireModPaths,
   getObjectMethodNames,
   parseSrcAst,
-  getObjectMethodsByEntryAndMethodNames
+  getObjectMethodsByEntryAndMethodNames,
+  getDependentMethodNames
 } from "../util/ast";
 import { EncodeConfig, MainConfig } from "../config/main_config";
 
@@ -57,18 +58,34 @@ export class MapContext {
     return [...methodNames];
   }
 
+  getDependencyNameByMod(name: string): string[] {
+    const mod = this.getMod(name);
+    const deps = mod?.dependencies;
+    if (deps) {
+      return Object.keys(deps);
+    }
+    return [];
+  }
+
+  getSrcPathByMod(name: string): string | undefined {
+    return this.getMod(name)?.src;
+  }
+
   static readFromLocal(inDir: string): MapContext {
     const inPath = path.join(inDir, MapContext.SAVE_FILE);
     console.log(`input map => ${inPath}`);
     const json = fs.readFileSync(inPath, { encoding: "utf-8" });
     const map = JSON.parse(json) as MapConfig;
     const mapContext = new MapContext();
-    Object.keys(map).forEach((name) => mapContext.appendModMap(map[name], false, name));
+    Object.keys(map).forEach((name) =>
+      mapContext.appendModMap(map[name], false, name)
+    );
     return mapContext;
   }
 
   private init() {
     this.buildMapContext(this.srcPath, this.entry, true);
+    this.shaking();
     this.writeToLocal();
   }
 
@@ -117,6 +134,35 @@ export class MapContext {
 
     [...requireModPathByName.entries()].forEach(([name, modPath]) => {
       this.buildMapContext(modPath, name, false);
+    });
+  }
+
+  private shaking() {
+    this.getModNames().forEach((modName) => {
+      const depNames = this.getDependencyNameByMod(modName);
+      if (!depNames.length) {
+        return;
+      }
+
+      const methodNames = this.getMethodNamesByMod(modName);
+      if (!methodNames.length) {
+        return;
+      }
+
+      const srcAst = parseSrcAst(this.getSrcPathByMod(modName));
+      const methodNamesByDepName = getDependentMethodNames(
+        srcAst,
+        methodNames,
+        depNames
+      );
+      const mod = this.getMod(modName)!;
+      depNames.forEach((depName) => {
+        mod.dependencies[depName] = new Dependency(
+          methodNamesByDepName.has(depName)
+            ? methodNamesByDepName.get(depName)
+            : []
+        );
+      });
     });
   }
 }

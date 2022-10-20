@@ -1,6 +1,6 @@
 {
   "name": "@kezh/my-custom-js-converter",
-  "version": "0.1.46",
+  "version": "0.1.51",
   "description": "自定义代码转换器",
   "main": "index.js",
   "bin": {
