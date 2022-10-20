@@ -383,23 +383,21 @@ export function importMods(
   srcAst: AstType,
   mapContext: MapContext
 ) {
-  const importMods = mapContext
-    .getModNames()
-    .filter((name) => name !== "self")
-    .map((name) => {
-      const mod = mapContext.getMod(name)!;
-      const requireFrom = relative(
-        outDir,
-        mod.src.replace(/index\.js$/, "")
-      ).replace(/[\\]+/g, "/");
-      const variableDeclarator = types.variableDeclarator(
-        types.identifier(name),
-        types.callExpression(types.identifier("require"), [
-          types.stringLiteral(requireFrom)
-        ])
-      );
-      return types.variableDeclaration("const", [variableDeclarator]);
-    });
+  const depNames = mapContext.getDependencyNameByMod("self");
+  const importMods = depNames.map(name => {
+    const srcPath = mapContext.getSrcPathByMod(name)!;
+    const requireFrom = relative(
+      outDir,
+      srcPath.replace(/index\.js$/, "")
+    ).replace(/[\\]+/g, "/");
+    const variableDeclarator = types.variableDeclarator(
+      types.identifier(name),
+      types.callExpression(types.identifier("require"), [
+        types.stringLiteral(requireFrom)
+      ])
+    );
+    return types.variableDeclaration("const", [variableDeclarator]);
+  });
 
   traverse(srcAst, {
     Program(path) {
