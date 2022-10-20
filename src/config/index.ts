@@ -1,11 +1,10 @@
 import fs from "fs";
 import path from "path";
 import { MainConfig } from "./main_config";
-import { SubConfig } from "./sub_config";
 
-export default config();
+export const config = initConfig();
 
-function config(): MainConfig {
+function initConfig(): MainConfig {
   const defConfig: MainConfig = {
     encode: {
       file: "index.js",
@@ -20,7 +19,7 @@ function config(): MainConfig {
     },
     baseDir: "",
     target: [""],
-    workDir: ".setting",
+    settingDir: ".setting",
     customConfig: "config.json",
   };
 

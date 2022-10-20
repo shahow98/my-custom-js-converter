@@ -3,7 +3,7 @@ export interface MainConfig {
   decode: DecodeConfig;
   baseDir: string;
   target: string[];
-  workDir: string;
+  settingDir: string;
   customConfig: string;
 }
 
