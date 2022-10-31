@@ -46,7 +46,7 @@ export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
 }
 
 /**
- * 获取所有依赖第三方模块路径
+ * 获取所有依赖第三方模块路径(仅导入program下一级的require)
  * val xx = require('path') => [xx, absolute path]
  * @param baseDir - 源码所在文件夹目录
  * @param srcAst - 源码AST
@@ -60,31 +60,29 @@ export function getRequireModPaths(
 ): Map<string, string> {
   const modPathByName = new Map<string, string>();
   traverse(srcAst, {
-    Identifier(nodePath) {
-      if (nodePath.node.name === "require") {
-        const callExpression = nodePath.findParent((path) =>
-          path.isCallExpression()
-        ) as NodePath<CallExpression> | null;
-        const args = callExpression?.node.arguments as Node[] | null;
-        if (args?.length != 1) {
-          return;
+    Program(path) {
+      path.node.body.filter(item => types.isVariableDeclaration(item)).flatMap(item => (item as VariableDeclaration).declarations)
+      .filter(item => {
+        if(types.isCallExpression(item.init) && types.isIdentifier(item.init.callee)) {
+          if(item.init.callee.name === "require") {
+            if(types.isIdentifier(item.id)) {
+              if(ignoreMod?.includes(item.id.name)) {
+                console.log(`ignore module => ${item.id.name}`);
+              } else {
+                return true;
+              }
+            }
+          }
         }
-        let modPath = (args[0] as StringLiteral).value;
-        modPath = scanfRequieMod(baseDir, modPath);
-        const variableDeclarator = nodePath.findParent((path) =>
-          path.isVariableDeclarator()
-        ) as NodePath<VariableDeclarator>;
-        if (!variableDeclarator) {
-          return;
+        return false;
+      }).forEach(item => {
+        const args = ((item.init as CallExpression).arguments);
+        if(args.length) {
+          const modName = (item.id as Identifier).name;
+          const modPath = (args[0] as StringLiteral).value;
+          modPathByName.set(modName, scanfRequieMod(baseDir, modPath));
         }
-        const id = variableDeclarator.node.id as Identifier;
-        const ignore = ignoreMod?.includes(id.name);
-        if (ignore) {
-          console.log(`ignore => ${id.name}`);
-        } else {
-          modPathByName.set(id.name, modPath);
-        }
-      }
+      });
     }
   });
   return modPathByName;
