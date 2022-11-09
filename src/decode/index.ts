@@ -36,14 +36,14 @@ function decoding$0(inPath: string, outPath: string, config: MainConfig) {
   let src = fs.readFileSync(inPath, {
     encoding: "utf-8"
   });
-  src = `const ${config.decode.mount} = {${src}};\r\nmodule.exports = customEvent;`;
+  src = `const ${config.decode.mount} = {${src}};\r\nmodule.exports = ${config.decode.mount};`;
   const srcAst = parse(src);
   if (!types.isNode(srcAst)) {
     return;
   }
   importMods(path.dirname(outPath), srcAst, mapContext);
   deleteModMethods(srcAst, mapContext);
-  let { code: dist } = generate(srcAst);
+  let { code: dist } = generate(srcAst, { compact: true });
   dist = dist.replace(/},\n\n/g, "},\n");
   dist = prettier.format(dist, {
     parser: "babel",
