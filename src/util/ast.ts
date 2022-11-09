@@ -386,7 +386,7 @@ export function importMods(
     const srcPath = mapContext.getSrcPathByMod(name)!;
     const requireFrom = relative(
       outDir,
-      srcPath.replace(/index\.js$/, "")
+      srcPath.replace(/(index)?\.js$/, "")
     ).replace(/[\\]+/g, "/");
     const variableDeclarator = types.variableDeclarator(
       types.identifier(name),
