@@ -432,7 +432,7 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       }
       const methodName = path.node.property.name;
       const split = methodName.split("__");
-      if(split.length > 1) {
+      if(split.length < 2) {
         return;
       }
       const depName = split[split.length - 1];
