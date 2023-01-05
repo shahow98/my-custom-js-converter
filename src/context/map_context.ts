@@ -85,6 +85,7 @@ export class MapContext {
 
   private init() {
     this.buildMapContext(this.srcPath, this.entry, true);
+    this.filtering();
     this.shaking();
     this.writeToLocal();
   }
@@ -137,6 +138,31 @@ export class MapContext {
     });
   }
 
+  /**
+   * 过滤self的dependencies中无效方法
+   */
+  private filtering() {
+    const self = "self";
+    const selfMod = this.getMod(self);
+    if (selfMod) {
+      const dependencies = selfMod.dependencies;
+      Object.keys(dependencies).forEach((depName) => {
+        const srcAst = parseSrcAst(this.getSrcPathByMod(depName));
+        const methodNames = getObjectMethodNames(
+          getObjectMethodsByEntryAndMethodNames(
+            srcAst,
+            depName,
+            dependencies[depName].methods
+          )
+        );
+        dependencies[depName].methods = methodNames;
+      });
+    }
+  }
+
+  /**
+   * 去除dependencies中未使用方法
+   */
   private shaking() {
     this.getModNames().forEach((modName) => {
       const depNames = this.getDependencyNameByMod(modName);

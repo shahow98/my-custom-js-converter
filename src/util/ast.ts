@@ -61,28 +61,34 @@ export function getRequireModPaths(
   const modPathByName = new Map<string, string>();
   traverse(srcAst, {
     Program(path) {
-      path.node.body.filter(item => types.isVariableDeclaration(item)).flatMap(item => (item as VariableDeclaration).declarations)
-      .filter(item => {
-        if(types.isCallExpression(item.init) && types.isIdentifier(item.init.callee)) {
-          if(item.init.callee.name === "require") {
-            if(types.isIdentifier(item.id)) {
-              if(ignoreMod?.includes(item.id.name)) {
-                console.log(`ignore module => ${item.id.name}`);
-              } else {
-                return true;
+      path.node.body
+        .filter((item) => types.isVariableDeclaration(item))
+        .flatMap((item) => (item as VariableDeclaration).declarations)
+        .filter((item) => {
+          if (
+            types.isCallExpression(item.init) &&
+            types.isIdentifier(item.init.callee)
+          ) {
+            if (item.init.callee.name === "require") {
+              if (types.isIdentifier(item.id)) {
+                if (ignoreMod?.includes(item.id.name)) {
+                  console.log(`ignore module => ${item.id.name}`);
+                } else {
+                  return true;
+                }
               }
             }
           }
-        }
-        return false;
-      }).forEach(item => {
-        const args = ((item.init as CallExpression).arguments);
-        if(args.length) {
-          const modName = (item.id as Identifier).name;
-          const modPath = (args[0] as StringLiteral).value;
-          modPathByName.set(modName, scanfRequieMod(baseDir, modPath));
-        }
-      });
+          return false;
+        })
+        .forEach((item) => {
+          const args = (item.init as CallExpression).arguments;
+          if (args.length) {
+            const modName = (item.id as Identifier).name;
+            const modPath = (args[0] as StringLiteral).value;
+            modPathByName.set(modName, scanfRequieMod(baseDir, modPath));
+          }
+        });
     }
   });
   return modPathByName;
@@ -277,6 +283,14 @@ function getInsideOwnMethodNames(
   return insideMethodNames;
 }
 
+/**
+ * 修改依赖方法调用者
+ * @param srcAst
+ * @param entry
+ * @param mod
+ * @param methods
+ * @param root
+ */
 export function modifyObjectMethods(
   srcAst: AstType,
   entry: string,
@@ -306,8 +320,11 @@ export function modifyObjectMethods(
         if (root && depName === entry) {
           path.node.object = types.thisExpression();
         } else if (deps.includes(depName)) {
-          path.node.object = types.thisExpression();
-          if (types.isIdentifier(path.node.property)) {
+          if (
+            types.isIdentifier(path.node.property) &&
+            mod.dependencies[depName].methods.includes(path.node.property.name)
+          ) {
+            path.node.object = types.thisExpression();
             path.node.property.name = `${path.node.property.name}__${depName}`;
           }
         }
@@ -382,7 +399,7 @@ export function importMods(
   mapContext: MapContext
 ) {
   const depNames = mapContext.getDependencyNameByMod("self");
-  const importMods = depNames.map(name => {
+  const importMods = depNames.map((name) => {
     const srcPath = mapContext.getSrcPathByMod(name)!;
     const requireFrom = relative(
       outDir,
@@ -421,7 +438,7 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       }
       const methodName = path.node.key.name;
       const split = methodName.split("__");
-      if(split.length < 2) {
+      if (split.length < 2) {
         return;
       }
       const depName = split.length ? split[split.length - 1] : "";
@@ -435,7 +452,7 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       }
       const methodName = path.node.property.name;
       const split = methodName.split("__");
-      if(split.length < 2) {
+      if (split.length < 2) {
         return;
       }
       const depName = split[split.length - 1];
