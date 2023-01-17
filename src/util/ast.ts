@@ -19,7 +19,7 @@ import { MapContext } from "../context/map_context";
 import { relative } from "path";
 import { AstPath } from "prettier";
 
-type AstType = Node | Node[] | null | undefined;
+export type AstType = Node | Node[] | null | undefined;
 
 export function parseSrcAst(srcPath?: string): AstType {
   if (!srcPath) {
@@ -95,28 +95,36 @@ export function getRequireModPaths(
 }
 
 /**
- * 获取源码中引用的第三方模块方法名
+ * 获取源码方法中引用的第三方模块方法名和自身模块方法名
  * @param mod - 依赖模块
+ * @param entry - 入口对象
  * @param srcAst - 源码AST
  * @returns
  */
 export function getRequireMethodNames(
   srcAst: AstType,
+  entry: string,
   mod: string[]
 ): Map<string, string[]> {
   const methodsByMod = new Map<string, string[]>();
   traverse(srcAst, {
     MemberExpression(path) {
-      const invokeObj = path.node.object;
-      if (!types.isIdentifier(invokeObj)) {
-        return;
-      }
       const invokeMethod = path.node.property;
       if (!types.isIdentifier(invokeMethod)) {
         return;
       }
-      const key = invokeObj.name;
-      if (!mod.includes(key)) {
+
+      const invokeObj = path.node.object;
+      let key: string | null = null;
+      if (types.isIdentifier(invokeObj)) {
+        key = invokeObj.name;
+        if (!mod.includes(key)) {
+          return;
+        }
+      } else if (types.isThisExpression(invokeObj)) {
+        key = entry;
+      }
+      if (!key) {
         return;
       }
       let methods: string[] = [];
@@ -346,6 +354,13 @@ export function modifyObjectMethods(
   });
 }
 
+/**
+ * 获取调用方法中所依赖第三方模块方法名
+ * @param srcAst
+ * @param methodNames - 调用方法名
+ * @param depNames - 依赖模块名
+ * @returns
+ */
 export function getDependentMethodNames(
   srcAst: AstType,
   methodNames: string[],
@@ -465,4 +480,62 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       }
     }
   });
+}
+
+/**
+ * 获取方法内部调用的方法名
+ * @param srcAst - 源码AST
+ * @param entry - 入口
+ * @param methodName - 方法名
+ * @param mapContext
+ */
+export function getInlineMethodsByMethodName(
+  srcAst: AstType,
+  entry: string,
+  methodName: string,
+  useMethodNameMap: Map<string, string[]>
+): string[] {
+  const inlineMethods = new Set<string>();
+  const selfMethods = useMethodNameMap.get(entry)!;
+  const mods = [...useMethodNameMap.keys()];
+
+  traverse(srcAst, {
+    MemberExpression(path) {
+      const objectMethodPath = path.findParent((path) =>
+        types.isObjectMethod(path)
+      ) as NodePath<ObjectMethod> | null;
+      if (!objectMethodPath) {
+        return;
+      }
+      if (!types.isIdentifier(objectMethodPath.node.key)) {
+        return;
+      }
+      if (objectMethodPath.node.key.name !== methodName) {
+        return;
+      }
+      if (
+        types.isThisExpression(path.node.object) &&
+        types.isIdentifier(path.node.property)
+      ) {
+        if (selfMethods.includes(path.node.property.name)) {
+          inlineMethods.add(`${entry}#${path.node.property.name}`);
+        }
+      }
+
+      if (
+        types.isIdentifier(path.node.object) &&
+        types.isIdentifier(path.node.property)
+      ) {
+        const modName = path.node.object.name;
+        const methodName = path.node.property.name;
+        if (
+          mods.includes(modName) &&
+          useMethodNameMap.get(modName)!.includes(methodName)
+        ) {
+          inlineMethods.add(`${modName}#${methodName}`);
+        }
+      }
+    }
+  });
+  return [...inlineMethods];
 }

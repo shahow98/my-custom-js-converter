@@ -7,7 +7,10 @@ import {
   getObjectMethodNames,
   parseSrcAst,
   getObjectMethodsByEntryAndMethodNames,
-  getDependentMethodNames
+  getDependentMethodNames,
+  getObjectMehtodsByMehtodNamesAndInsideOwnMethods,
+  AstType,
+  getInlineMethodsByMethodName
 } from "../util/ast";
 import { EncodeConfig, MainConfig } from "../config/main_config";
 
@@ -120,8 +123,10 @@ export class MapContext {
     const requireModNames = [...requireModPathByName.keys()].map(
       (name) => name
     );
+    !root && requireModNames.unshift(entry);
     const requireMethodNamesByMod = getRequireMethodNames(
       srcAst,
+      entry,
       requireModNames
     );
     const dependencies = new Dependencies();
@@ -142,10 +147,9 @@ export class MapContext {
    * 过滤self的dependencies中无效方法
    */
   private filtering() {
-    const self = "self";
-    const selfMod = this.getMod(self);
-    if (selfMod) {
-      const dependencies = selfMod.dependencies;
+    this.getModNames().forEach((modName) => {
+      const mod = this.getMod(modName)!;
+      const dependencies = mod.dependencies;
       Object.keys(dependencies).forEach((depName) => {
         const srcAst = parseSrcAst(this.getSrcPathByMod(depName));
         const methodNames = getObjectMethodNames(
@@ -157,38 +161,52 @@ export class MapContext {
         );
         dependencies[depName].methods = methodNames;
       });
-    }
+    });
   }
 
   /**
    * 去除dependencies中未使用方法
    */
   private shaking() {
-    this.getModNames().forEach((modName) => {
-      const depNames = this.getDependencyNameByMod(modName);
-      if (!depNames.length) {
-        return;
+    const astMap = new Map<string, AstType>();
+    this.getModNames().forEach((mod) => {
+      astMap.set(mod, parseSrcAst(this.getMod(mod)!.src));
+    });
+    const useMethodNameMap = new Map<string, string[]>();
+    this.getModNames().forEach((mod) => {
+      useMethodNameMap.set(mod, this.getMethodNamesByMod(mod));
+    });
+    const dependencies = this.getMod("self")!.dependencies;
+    const filterMethodMap = new Map<string, Set<string>>();
+    const readyStack = Object.keys(dependencies).flatMap((name) =>
+      dependencies[name].methods.map((method) => [name, method])
+    );
+    while (readyStack.length) {
+      const method = readyStack.shift()!;
+      let filterMethods = new Set<string>();
+      if (filterMethodMap.has(method[0])) {
+        filterMethods = filterMethodMap.get(method[0])!;
       }
+      filterMethods.add(method[1]);
+      filterMethodMap.set(method[0], filterMethods);
 
-      const methodNames = this.getMethodNamesByMod(modName);
-      if (!methodNames.length) {
-        return;
-      }
-
-      const srcAst = parseSrcAst(this.getSrcPathByMod(modName));
-      const methodNamesByDepName = getDependentMethodNames(
-        srcAst,
-        methodNames,
-        depNames
+      const inlineMethods = getInlineMethodsByMethodName(
+        astMap.get(method[0]),
+        method[0],
+        method[1],
+        useMethodNameMap
       );
-      const mod = this.getMod(modName)!;
-      depNames.forEach((depName) => {
-        mod.dependencies[depName] = new Dependency(
-          methodNamesByDepName.has(depName)
-            ? methodNamesByDepName.get(depName)
-            : []
-        );
-      });
+      readyStack.push(...inlineMethods.map((m) => m.split("#")));
+    }
+
+    [...filterMethodMap.keys()].forEach((fMod) => {
+      const filterMethods = filterMethodMap.get(fMod)!;
+      this.getModNames().forEach((modName) => {
+        const dep = this.getMod(modName)?.dependencies[fMod];
+        if(dep) {
+          dep.methods = dep.methods.filter((m) => filterMethods.has(m));
+        }
+      })
     });
   }
 }
