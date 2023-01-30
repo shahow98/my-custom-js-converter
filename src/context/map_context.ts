@@ -113,6 +113,7 @@ export class MapContext {
     );
     if (!srcMethodNames.length) {
       console.log(`not found entry => ${entry}`);
+      this.appendModMap(new Mod(inPath, new Dependencies()), root, entry);
       return;
     }
 
@@ -203,10 +204,10 @@ export class MapContext {
       const filterMethods = filterMethodMap.get(fMod)!;
       this.getModNames().forEach((modName) => {
         const dep = this.getMod(modName)?.dependencies[fMod];
-        if(dep) {
+        if (dep) {
           dep.methods = dep.methods.filter((m) => filterMethods.has(m));
         }
-      })
+      });
     });
   }
 }
