@@ -77,13 +77,19 @@ export class MapContext {
   static readFromLocal(inDir: string): MapContext {
     const inPath = path.join(inDir, MapContext.SAVE_FILE);
     console.log(`input map => ${inPath}`);
-    const json = fs.readFileSync(inPath, { encoding: "utf-8" });
-    const map = JSON.parse(json) as MapConfig;
-    const mapContext = new MapContext();
-    Object.keys(map).forEach((name) =>
-      mapContext.appendModMap(map[name], false, name)
-    );
-    return mapContext;
+    try {
+      const json = fs.readFileSync(inPath, { encoding: "utf-8" });
+      const map = JSON.parse(json) as MapConfig;
+      const mapContext = new MapContext();
+      Object.keys(map).forEach((name) =>
+        mapContext.appendModMap(map[name], false, name)
+      );
+      return mapContext;
+    } catch (err) {
+      console.log("the map is not found!");
+      console.log(err);
+    }
+    return new MapContext();
   }
 
   private init() {
