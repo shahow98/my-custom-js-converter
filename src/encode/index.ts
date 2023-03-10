@@ -39,8 +39,7 @@ import {
 function encoding$0(mapContext: MapContext, entry: string): ObjectMethod[] {
   const modNames = mapContext.getModNames();
   return modNames.flatMap((name) => {
-    const mod = mapContext.getMod(name);
-    const srcAst = parseSrcAst(mod?.src);
+    const srcAst = parseSrcAst(mapContext.getAbsoluteSrcPathByMod(name));
     // console.log(`import => ${name}`);
     const srcMethods = [];
     const self = name === "self";

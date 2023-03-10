@@ -7,12 +7,10 @@ import {
   getObjectMethodNames,
   parseSrcAst,
   getObjectMethodsByEntryAndMethodNames,
-  getDependentMethodNames,
-  getObjectMehtodsByMehtodNamesAndInsideOwnMethods,
   AstType,
   getInlineMethodsByMethodName
 } from "../util/ast";
-import { EncodeConfig, MainConfig } from "../config/main_config";
+import { getParentRootDir } from "../util/parent_path";
 
 export class MapContext {
   static SAVE_FILE = "mod.map";
@@ -74,6 +72,14 @@ export class MapContext {
     return this.getMod(name)?.src;
   }
 
+  getAbsoluteSrcPathByMod(name: string): string | undefined {
+    const srcPath = this.getSrcPathByMod(name);
+    const parentRootDir = getParentRootDir();
+    return parentRootDir && srcPath
+      ? path.resolve(parentRootDir, srcPath)
+      : srcPath;
+  }
+
   static readFromLocal(inDir: string): MapContext {
     const inPath = path.join(inDir, MapContext.SAVE_FILE);
     console.log(`input map => ${inPath}`);
@@ -87,7 +93,7 @@ export class MapContext {
       return mapContext;
     } catch (err) {
       console.log("the map is not found!");
-      console.log(err);
+      // console.log(err);
     }
     return new MapContext();
   }
@@ -142,7 +148,11 @@ export class MapContext {
       dependencies[name] = dep;
     });
 
-    const mod = new Mod(inPath, dependencies);
+    const parentRootDir = getParentRootDir();
+    const mod = new Mod(
+      parentRootDir ? path.relative(parentRootDir, inPath) : inPath,
+      dependencies
+    );
     this.appendModMap(mod, root, entry);
 
     [...requireModPathByName.entries()].forEach(([name, modPath]) => {
@@ -158,7 +168,7 @@ export class MapContext {
       const mod = this.getMod(modName)!;
       const dependencies = mod.dependencies;
       Object.keys(dependencies).forEach((depName) => {
-        const srcAst = parseSrcAst(this.getSrcPathByMod(depName));
+        const srcAst = parseSrcAst(this.getAbsoluteSrcPathByMod(depName));
         const methodNames = getObjectMethodNames(
           getObjectMethodsByEntryAndMethodNames(
             srcAst,
@@ -177,7 +187,7 @@ export class MapContext {
   private shaking() {
     const astMap = new Map<string, AstType>();
     this.getModNames().forEach((mod) => {
-      astMap.set(mod, parseSrcAst(this.getMod(mod)!.src));
+      astMap.set(mod, parseSrcAst(this.getAbsoluteSrcPathByMod(mod)));
     });
     const useMethodNameMap = new Map<string, string[]>();
     this.getModNames().forEach((mod) => {

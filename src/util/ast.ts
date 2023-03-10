@@ -345,11 +345,6 @@ export function modifyObjectMethods(
       if (types.isIdentifier(path.node.key)) {
         path.node.key.name = `${path.node.key.name}__${entry}`;
       }
-      types.addComment(
-        path.node.body,
-        "inner",
-        "auto-generated: Please do not modify the."
-      );
     }
   });
 }
@@ -415,7 +410,7 @@ export function importMods(
 ) {
   const depNames = mapContext.getDependencyNameByMod("self");
   const importMods = depNames.map((name) => {
-    const srcPath = mapContext.getSrcPathByMod(name)!;
+    const srcPath = mapContext.getAbsoluteSrcPathByMod(name)!;
     const requireFrom = relative(
       outDir,
       srcPath.replace(/(index)?\.js$/, "")
