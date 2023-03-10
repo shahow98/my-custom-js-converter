@@ -18,6 +18,7 @@ import { Mod } from "../config/map_config";
 import { MapContext } from "../context/map_context";
 import { relative } from "path";
 import { AstPath } from "prettier";
+import { EOL } from "os";
 
 export type AstType = Node | Node[] | null | undefined;
 
@@ -32,7 +33,7 @@ export function parseSrcAst(srcPath?: string): AstType {
 }
 
 export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
-  const dist = methods
+  let dist = methods
     .map((m) => {
       if (m.leadingComments?.length) {
         m.leadingComments = undefined;
@@ -41,7 +42,8 @@ export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
     })
     .map((m) => generate(m))
     .map((m) => m.code)
-    .join(",\n");
+    .join(`,\n`);
+  dist = dist.replace(/\n/gm, EOL);
   fs.writeFileSync(outPath, dist, "utf-8");
 }
 

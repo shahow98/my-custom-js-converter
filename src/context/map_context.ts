@@ -11,6 +11,7 @@ import {
   getInlineMethodsByMethodName
 } from "../util/ast";
 import { getParentRootDir } from "../util/parent_path";
+import { EOL } from "os";
 
 export class MapContext {
   static SAVE_FILE = "mod.map";
@@ -114,7 +115,7 @@ export class MapContext {
     } catch (err) {
       fs.mkdirSync(this.outDir);
     }
-    fs.writeFileSync(outPath, json, "utf-8");
+    fs.writeFileSync(outPath, json.replace(/\n/gm, EOL), "utf-8");
   }
 
   private buildMapContext(inPath: string, entry: string, root: boolean) {
@@ -216,14 +217,29 @@ export class MapContext {
       readyStack.push(...inlineMethods.map((m) => m.split("#")));
     }
 
-    [...filterMethodMap.keys()].forEach((fMod) => {
-      const filterMethods = filterMethodMap.get(fMod)!;
-      this.getModNames().forEach((modName) => {
-        const dep = this.getMod(modName)?.dependencies[fMod];
-        if (dep) {
-          dep.methods = dep.methods.filter((m) => filterMethods.has(m));
-        }
+    const filterMapConfig = new MapConfig();
+    this.getModNames()
+      .map((modName) => [modName, this.getMod(modName)])
+      .filter((modInfo) => modInfo[1])
+      .forEach((modInfo) => {
+        const filterDeps = new Dependencies();
+        const mod = modInfo[1] as Mod;
+        const deps = mod.dependencies;
+        Object.keys(deps)
+          .filter((depName) => [...filterMethodMap.keys()].includes(depName))
+          .map((depName) => {
+            const filterMethods = deps[depName].methods.filter((method) =>
+              filterMethodMap.get(depName)!.has(method)
+            );
+            return [depName, new Dependency(filterMethods)];
+          })
+          .forEach(
+            (depInfo) =>
+              (filterDeps[depInfo[0] as string] = depInfo[1] as Dependency)
+          );
+        const filterMod = new Mod(mod?.src, filterDeps);
+        filterMapConfig[modInfo[0] as string] = filterMod;
       });
-    });
+    this.map = filterMapConfig;
   }
 }

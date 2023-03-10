@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { EOL } from "os";
 import prettier from "prettier";
 import { config } from "../config";
 import { MainConfig } from "../config/main_config";
@@ -36,7 +37,7 @@ function decoding$0(inPath: string, outPath: string, config: MainConfig) {
   let src = fs.readFileSync(inPath, {
     encoding: "utf-8"
   });
-  src = `const ${config.decode.mount} = {${src}};\r\nmodule.exports = ${config.decode.mount};`;
+  src = `const ${config.decode.mount} = {${src}};${EOL}module.exports = ${config.decode.mount};`;
   const srcAst = parse(src);
   if (!types.isNode(srcAst)) {
     return;
@@ -44,7 +45,7 @@ function decoding$0(inPath: string, outPath: string, config: MainConfig) {
   importMods(path.dirname(outPath), srcAst, mapContext);
   deleteModMethods(srcAst, mapContext);
   let { code: dist } = generate(srcAst, { compact: true });
-  dist = dist.replace(/},\n\n/g, "},\n");
+  dist = dist.replace(/},\n\n/g, `},${EOL}`);
   dist = prettier.format(dist, {
     parser: "babel",
     trailingComma: "none"
