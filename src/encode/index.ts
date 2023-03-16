@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import path from "path";
 import { scanfCodeFiles, scanfCodeDirs } from "../scanf";
 import { config } from "../config";
