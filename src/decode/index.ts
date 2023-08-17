@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-import path from "path";
+import { types } from "@babel/core";
+import generate from "@babel/generator";
+import { parse } from "@babel/parser";
 import fs from "fs";
 import { EOL } from "os";
+import path from "path";
 import prettier from "prettier";
 import { config } from "../config";
 import { MainConfig } from "../config/main_config";
+import { MapContext } from "../context/map_context";
 import { scanfCodeDirs, scanfCodeFiles } from "../scanf";
 import { deleteModMethods, importMods } from "../util/ast";
-import { MapContext } from "../context/map_context";
-import generate from "@babel/generator";
-import { parse } from "@babel/parser";
-import { types } from "@babel/core";
 
 (function decoding(config: MainConfig) {
   const targetDirs = scanfCodeDirs(config.baseDir, config.target);
@@ -46,7 +46,10 @@ function decoding$0(inPath: string, outPath: string, config: MainConfig) {
   importMods(path.dirname(outPath), srcAst, mapContext);
   deleteModMethods(srcAst, mapContext);
   let { code: dist } = generate(srcAst, { compact: true });
-  dist = dist.replace(/},\n\n/g, `},${EOL}`);
+  dist = dist.replace(/\\u([\d\w]{4})/g, (match, group) => {
+    const charCode = parseInt(group, 16);
+    return String.fromCharCode(charCode);
+  });
   dist = prettier.format(dist, {
     parser: "babel",
     trailingComma: "none"
