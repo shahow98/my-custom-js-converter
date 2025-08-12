@@ -214,7 +214,7 @@ export class MapContext {
         method[1],
         useMethodNameMap
       );
-      readyStack.push(...inlineMethods.map((m) => m.split("#")));
+      readyStack.push(...inlineMethods.filter((m) => method.join("#") != m).map((m) => m.split("#")));
     }
 
     const filterMapConfig = new MapConfig();
