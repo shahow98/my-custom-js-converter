@@ -1,0 +1,17 @@
+{
+  "encode": {
+    "file": "index.js",
+    "output": "coded.js",
+    "entry": "customEvent",
+    "ignoreMod": []
+  },
+  "decode": {
+    "file": "coded.js",
+    "output": "decoded.js",
+    "mount": "customEvent"
+  },
+  "baseDir": "",
+  "target": ["src"],
+  "settingDir": ".setting",
+  "customConfig": "config.json"
+}

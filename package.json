@@ -8,7 +8,9 @@
     "decode": "core/decode/index.js"
   },
   "scripts": {
-    "build": "npx tsc --build"
+    "build": "npx tsc --build",
+    "test": "npm run build && node test/run_tests.js",
+    "test:manual": "npm run build && node test/manual_review.js"
   },
   "engines": {
     "node": ">=24.15.0"
