@@ -1,14 +1,15 @@
 import fs from "fs";
 import path from "path";
+import { Dirent } from "fs";
 
 export function scanfCodeFiles(
   dirPaths: string | string[],
   filterName: string = ""
 ): string[] {
-  if (dirPaths instanceof String) {
-    return scanfCodeFiles$0(dirPaths as string, filterName);
+  if (typeof dirPaths === "string") {
+    return scanfCodeFiles$0(dirPaths, filterName);
   }
-  if (dirPaths instanceof Array<string>) {
+  if (Array.isArray(dirPaths)) {
     return (dirPaths as string[]).flatMap((p) =>
       scanfCodeFiles$0(p, filterName)
     );
@@ -22,19 +23,19 @@ function scanfCodeFiles$0(dirPath: string, filterName: string = ""): string[] {
     console.log(`路径不存在[${dirPath}]忽略`);
     return filePaths;
   }
-  const files = fs.readdirSync(dirPath, {
+  const files: Dirent[] = fs.readdirSync(dirPath, {
     encoding: "utf-8",
     withFileTypes: true
   });
   files
-    .filter((file) => file.isFile())
-    .filter((file) => file.name == filterName)
+    .filter((file: Dirent) => file.isFile())
+    .filter((file: Dirent) => file.name == filterName)
     .forEach(() => {
       filePaths.push(`${path.join(dirPath, filterName)}`);
     });
   files
-    .filter((file) => file.isDirectory())
-    .forEach((dir) => {
+    .filter((file: Dirent) => file.isDirectory())
+    .forEach((dir: Dirent) => {
       filePaths.push(
         ...scanfCodeFiles$0(`${path.join(dirPath, dir.name)}`, filterName)
       );

@@ -12,17 +12,17 @@ import { MapContext } from "../context/map_context";
 import { scanfCodeDirs, scanfCodeFiles } from "../scanf";
 import { deleteModMethods, importMods } from "../util/ast";
 
-(function decoding(config: MainConfig) {
+(async function decoding(config: MainConfig) {
   const targetDirs = scanfCodeDirs(config.baseDir, config.target);
   console.log("scanf dirs => ");
   console.log(targetDirs);
   const codeFiles = scanfCodeFiles(targetDirs, config.decode.file);
-  codeFiles.forEach((inPath) => {
+  for (const inPath of codeFiles) {
     console.log(`scanf file => ${inPath}`);
     const outPath = path.join(path.dirname(inPath), config.decode.output);
-    decoding$0(inPath, outPath, config);
+    await decoding$0(inPath, outPath, config);
     console.log(`output => ${outPath}`);
-  });
+  }
 })(config);
 
 /**
@@ -31,7 +31,7 @@ import { deleteModMethods, importMods } from "../util/ast";
  * @param outPath - 输入文件路径
  * @param mount - 方法挂载点
  */
-function decoding$0(inPath: string, outPath: string, config: MainConfig) {
+async function decoding$0(inPath: string, outPath: string, config: MainConfig) {
   const mapContext = MapContext.readFromLocal(
     path.join(path.dirname(inPath), config.settingDir)
   );
@@ -50,7 +50,7 @@ function decoding$0(inPath: string, outPath: string, config: MainConfig) {
     const charCode = parseInt(group, 16);
     return String.fromCharCode(charCode);
   });
-  dist = prettier.format(dist, {
+  dist = await prettier.format(dist, {
     parser: "babel",
     trailingComma: "none"
   });

@@ -10,26 +10,31 @@
   "scripts": {
     "build": "npx tsc --build"
   },
+  "engines": {
+    "node": ">=24.15.0"
+  },
   "author": "shahow",
   "license": "MIT",
   "keywords": [
     "babel"
   ],
   "dependencies": {
-    "@babel/cli": "^7.18.10",
-    "@babel/core": "^7.18.13",
-    "@babel/generator": "^7.18.13",
-    "@babel/parser": "^7.18.13",
-    "@babel/traverse": "^7.18.13",
-    "@babel/types": "^7.18.13",
-    "prettier": "^2.7.1"
+    "@babel/cli": "^7.29.7",
+    "@babel/core": "^7.29.7",
+    "@babel/generator": "^7.29.7",
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
+    "@babel/types": "^7.29.7",
+    "prettier": "^3.8.4"
   },
   "devDependencies": {
-    "@types/babel__core": "^7.1.19",
-    "@types/babel__generator": "^7.6.4",
-    "@types/babel__traverse": "^7.18.1",
-    "@types/node": "^18.7.14",
-    "@types/prettier": "^2.7.0",
-    "typescript": "^4.8.2"
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__generator": "^7.27.0",
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^25.9.3",
+    "typescript": "^6.0.3"
+  },
+  "volta": {
+    "node": "24.15.0"
   }
 }

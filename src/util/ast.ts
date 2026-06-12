@@ -17,7 +17,6 @@ import { scanfCodeFiles, scanfCodeDirs, scanfRequieMod } from "../scanf";
 import { Mod } from "../config/map_config";
 import { MapContext } from "../context/map_context";
 import { relative } from "path";
-import { AstPath } from "prettier";
 import { EOL } from "os";
 
 export type AstType = Node | Node[] | null | undefined;
@@ -61,7 +60,7 @@ export function getRequireModPaths(
   ignoreMod?: string[]
 ): Map<string, string> {
   const modPathByName = new Map<string, string>();
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     Program(path) {
       path.node.body
         .filter((item) => types.isVariableDeclaration(item))
@@ -109,7 +108,7 @@ export function getRequireMethodNames(
   mod: string[]
 ): Map<string, string[]> {
   const methodsByMod = new Map<string, string[]>();
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
       const invokeMethod = path.node.property;
       if (!types.isIdentifier(invokeMethod)) {
@@ -165,7 +164,7 @@ export function getObjectMethodsByEntryAndMethodNames(
   methodNames?: string[]
 ): ObjectMethod[] {
   const methods: ObjectMethod[] = [];
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     Program(path) {
       path.node.body.forEach((statement) => {
         if (types.isVariableDeclaration(statement)) {
@@ -251,7 +250,7 @@ function getInsideOwnMethodNames(
   methodNames.forEach((name) => allMethodNameSet.add(name));
 
   const insideMethodNameSet = new Set<string>();
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
       if (
         !(
@@ -263,8 +262,8 @@ function getInsideOwnMethodNames(
         return;
       }
 
-      const objectMethodNode = path.findParent((path) =>
-        types.isObjectMethod(path)
+      const objectMethodNode = path.findParent((p) =>
+        types.isObjectMethod(p.node)
       ) as NodePath<ObjectMethod> | null;
       if (!types.isIdentifier(objectMethodNode?.node.key)) {
         return;
@@ -311,7 +310,7 @@ export function modifyObjectMethods(
   const deps = Object.keys(mod.dependencies);
   const methodNames = getObjectMethodNames(methods);
 
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
       if (
         types.isThisExpression(path.node.object) &&
@@ -364,10 +363,10 @@ export function getDependentMethodNames(
   depNames: string[]
 ) {
   const methodNamesByDepName = new Map<string, string[]>();
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
-      const objectMethodNode = path.findParent((path) =>
-        types.isObjectMethod(path)
+      const objectMethodNode = path.findParent((p) =>
+        types.isObjectMethod(p.node)
       ) as NodePath<ObjectMethod> | null;
       if (!types.isIdentifier(objectMethodNode?.node.key)) {
         return;
@@ -426,7 +425,7 @@ export function importMods(
     return types.variableDeclaration("const", [variableDeclarator]);
   });
 
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     Program(path) {
       path.node.body.unshift(...importMods);
     }
@@ -443,7 +442,7 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
     .getModNames()
     .flatMap((name) => Object.keys(mapContext.getMod(name)?.dependencies!))
     .forEach((dep) => deps.add(dep));
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     ObjectMethod(path) {
       if (!types.isIdentifier(path.node.key)) {
         return;
@@ -457,7 +456,7 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       deps.has(depName) && path.remove();
     }
   });
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
       if (!types.isIdentifier(path.node.property)) {
         return;
@@ -496,10 +495,10 @@ export function getInlineMethodsByMethodName(
   const selfMethods = useMethodNameMap.get(entry)!;
   const mods = [...useMethodNameMap.keys()];
 
-  traverse(srcAst, {
+  traverse(srcAst as Node, {
     MemberExpression(path) {
-      const objectMethodPath = path.findParent((path) =>
-        types.isObjectMethod(path)
+      const objectMethodPath = path.findParent((p) =>
+        types.isObjectMethod(p.node)
       ) as NodePath<ObjectMethod> | null;
       if (!objectMethodPath) {
         return;
