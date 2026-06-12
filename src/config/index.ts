@@ -20,7 +20,7 @@ function initConfig(): MainConfig {
     baseDir: "",
     target: [""],
     settingDir: ".setting",
-    customConfig: "config.json",
+    customConfig: "config.js",
   };
 
   const curDir = __dirname;
@@ -28,8 +28,15 @@ function initConfig(): MainConfig {
   try {
     const configPath = path.join(baseDir, defConfig.customConfig);
     fs.accessSync(configPath);
-    const json = fs.readFileSync(configPath, { encoding: "utf-8" });
-    const customConfig = JSON.parse(json) as MainConfig;
+    let customConfig: MainConfig;
+    if (configPath.endsWith(".js")) {
+      // 支持 .js 配置文件，可使用注释
+      customConfig = require(configPath) as MainConfig;
+    } else {
+      // 兼容 .json 配置文件
+      const json = fs.readFileSync(configPath, { encoding: "utf-8" });
+      customConfig = JSON.parse(json) as MainConfig;
+    }
     defConfig.baseDir = baseDir;
     Object.keys(customConfig).map(key => key as keyof typeof customConfig).forEach((key) => {
       if(customConfig[key]) {
