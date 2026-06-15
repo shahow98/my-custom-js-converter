@@ -51,11 +51,15 @@ function setupTempProject() {
     path.join(srcDir, 'helper.js')
   );
 
-  // 复制 config.json
+  // 复制 config.json 并动态设置 baseDir
+  const configPath = path.join(tempDir, 'config.json');
   fs.copyFileSync(
     path.join(FIXTURE_DIR, 'config.json'),
-    path.join(tempDir, 'config.json')
+    configPath
   );
+  const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  configData.baseDir = tempDir;
+  fs.writeFileSync(configPath, JSON.stringify(configData, null, 2), 'utf-8');
 
   // 创建 node_modules 符号链接
   const modDir = path.join(tempDir, 'node_modules', '@kezh', 'my-custom-js-converter');

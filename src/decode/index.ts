@@ -57,7 +57,7 @@ async function decoding$0(
   if (!types.isNode(srcAst)) {
     return;
   }
-  importMods(path.dirname(outPath), srcAst, mapContext);
+  importMods(path.dirname(outPath), srcAst, mapContext, config.encode.useAlias);
   deleteModMethods(srcAst, mapContext);
 
   // 从onFormReady方法中提取版本日志并移除

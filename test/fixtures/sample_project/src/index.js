@@ -1,4 +1,4 @@
-const util = require('./util/index');
+const util = require('@/src/util/index');
 const helper = require('./helper');
 
 const customEvent = {

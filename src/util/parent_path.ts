@@ -4,8 +4,11 @@
  */
 export function getParentRootDir(): string | undefined {
   const curDir = __dirname;
-  if (curDir.search(/node_modules.*/) === -1) {
-    return undefined;
+  if (curDir.includes("node_modules")) {
+    return curDir.replace(/node_modules.*/g, "");
   }
-  return curDir.replace(/node_modules.*/g, "");
+  // 当 __dirname 不包含 node_modules 时（如 junction symlink 场景），
+  // 使用 config.baseDir 作为项目根目录
+  const { config } = require("../config");
+  return config.baseDir || undefined;
 }

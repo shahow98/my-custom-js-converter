@@ -3,14 +3,14 @@
     "file": "index.js",
     "output": "coded.js",
     "entry": "customEvent",
-    "ignoreMod": []
+    "ignoreMod": [],
+    "useAlias": true
   },
   "decode": {
     "file": "coded.js",
     "output": "decoded.js",
     "mount": "customEvent"
   },
-  "baseDir": "",
   "target": ["src"],
   "settingDir": ".setting",
   "customConfig": "config.json"

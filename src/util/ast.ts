@@ -18,6 +18,8 @@ import { Mod } from "../config/map_config";
 import { MapContext } from "../context/map_context";
 import { relative } from "path";
 import { EOL } from "os";
+import { getParentRootDir } from "./parent_path";
+import { config } from "../config";
 
 export type AstType = Node | Node[] | null | undefined;
 
@@ -57,7 +59,8 @@ export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
 export function getRequireModPaths(
   baseDir: string,
   srcAst: AstType,
-  ignoreMod?: string[]
+  ignoreMod?: string[],
+  rootDir?: string
 ): Map<string, string> {
   const modPathByName = new Map<string, string>();
   traverse(srcAst as Node, {
@@ -87,7 +90,7 @@ export function getRequireModPaths(
           if (args.length) {
             const modName = (item.id as Identifier).name;
             const modPath = (args[0] as StringLiteral).value;
-            modPathByName.set(modName, scanfRequieMod(baseDir, modPath));
+            modPathByName.set(modName, scanfRequieMod(baseDir, modPath, rootDir));
           }
         });
     }
@@ -403,19 +406,39 @@ export function getDependentMethodNames(
  * @param outDir
  * @param srcAst
  * @param mapContext
+ * @param useAlias - 是否使用 @ 别名路径
  */
 export function importMods(
   outDir: string,
   srcAst: AstType,
-  mapContext: MapContext
+  mapContext: MapContext,
+  useAlias: boolean = false
 ) {
   const depNames = mapContext.getDependencyNameByMod("self");
+  const rootDir = getParentRootDir() || config.baseDir;
   const importMods = depNames.map((name) => {
     const srcPath = mapContext.getAbsoluteSrcPathByMod(name)!;
-    const requireFrom = relative(
-      outDir,
-      srcPath.replace(/(index)?\.js$/, "")
-    ).replace(/[\\]+/g, "/");
+    let requireFrom: string;
+    if (useAlias && rootDir) {
+      // 使用 @ 别名：@/xxx => baseDir/xxx
+      const aliasPath = srcPath
+        .replace(rootDir, "")
+        .replace(/\\/g, "/")
+        .replace(/\/index\.js$/, "")
+        .replace(/\.js$/, "");
+      requireFrom = "@" + aliasPath;
+    } else {
+      requireFrom = relative(
+        outDir,
+        srcPath.replace(/\/index\.js$/, "").replace(/\\index\.js$/, "").replace(/\.js$/, "")
+      )
+        .split(/[/\\]/)
+        .join("/");
+      // 确保相对路径以 ./ 开头（Node.js require 需要 ./ 前缀来区分本地模块和 npm 包）
+      if (!requireFrom.startsWith(".") && !requireFrom.startsWith("/")) {
+        requireFrom = "./" + requireFrom;
+      }
+    }
     const variableDeclarator = types.variableDeclarator(
       types.identifier(name),
       types.callExpression(types.identifier("require"), [

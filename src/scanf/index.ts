@@ -55,11 +55,25 @@ export function scanfCodeDirs(baseDir: string, targetDirs: string[]): string[] {
  * require('../../util')
  *   - is dir ../../util/index.js
  *   - is file ../../util.js
+ * require('@/util')
+ *   - @ 代表项目根目录(rootDir)，解析为 rootDir/util
+ *   - is dir rootDir/util/index.js
+ *   - is file rootDir/util.js
  *   - throw err
+ * @param baseDir - 基础目录（当前文件所在目录，用于相对路径解析）
  * @param modPath - 引入路径
+ * @param rootDir - 项目根目录（用于 @ 别名解析，若未提供则 @ 路径无法解析）
  * @returns
  */
-export function scanfRequieMod(baseDir: string, modPath: string): string {
+export function scanfRequieMod(baseDir: string, modPath: string, rootDir?: string): string {
+  // 支持 @ 别名：@/xxx => rootDir/xxx
+  if (modPath.startsWith("@/") || modPath.startsWith("@\\")) {
+    if (!rootDir) {
+      throw new Error(`@ 别名路径需要配置 rootDir，请检查 config.js 中 useAlias 是否开启`);
+    }
+    modPath = modPath.replace(/^@[/\\]/, "");
+    baseDir = rootDir.replace(/[\\/]$/, "");
+  }
   let absolutePath = path.join(baseDir, modPath);
   try {
     fs.accessSync(absolutePath, fs.constants.R_OK);

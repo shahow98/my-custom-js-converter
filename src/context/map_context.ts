@@ -11,6 +11,7 @@ import {
   getInlineMethodsByMethodName
 } from "../util/ast";
 import { getParentRootDir } from "../util/parent_path";
+import { config } from "../config";
 import { EOL } from "os";
 
 export class MapContext {
@@ -132,7 +133,9 @@ export class MapContext {
 
     const requireModPathByName = getRequireModPaths(
       path.dirname(inPath),
-      srcAst
+      srcAst,
+      undefined,
+      config.encode.useAlias ? (getParentRootDir() || config.baseDir) : undefined
     );
     const requireModNames = [...requireModPathByName.keys()].map(
       (name) => name

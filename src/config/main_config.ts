@@ -12,6 +12,7 @@ export interface EncodeConfig {
   output: string;
   entry: string;
   ignoreMod: string[];
+  useAlias: boolean;
 }
 
 export interface DecodeConfig {
