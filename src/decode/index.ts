@@ -120,6 +120,10 @@ function extractAndRemoveVersionLog(srcAst: Node, settingDir: string): void {
           }
         }
       }
+      // 如果onFormReady方法体为空（仅包含版本日志），则删除整个方法
+      if (body.length === 0) {
+        path.remove();
+      }
     }
   });
 

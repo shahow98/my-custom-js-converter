@@ -2,7 +2,7 @@
 import path from "path";
 import { scanfCodeFiles, scanfCodeDirs } from "../scanf";
 import { config } from "../config";
-import { ObjectMethod } from "@babel/types";
+import { ObjectMethod, Identifier } from "@babel/types";
 import { MainConfig } from "../config/main_config";
 import { MapContext } from "../context/map_context";
 import {
@@ -45,6 +45,8 @@ import { Node } from "@babel/core";
     const version = readOrCreateVersion(settingDir);
     // 在onFormReady方法中注入版本日志
     injectVersionLog(methods, version);
+    // 将onFormReady和onFormSubmit排到最前面
+    reorderMethods(methods);
 
     const outPath = path.join(workDir, encodeConfig.output);
     console.log(`output file => ${outPath}`);
@@ -129,4 +131,35 @@ function injectVersionLog(methods: ObjectMethod[], version: string): void {
     );
     methods.push(newMethod as ObjectMethod);
   }
+}
+
+/**
+ * 将onFormReady和onFormSubmit方法排到最前面，不存在则忽略
+ * @param methods - 已编码的方法列表（原地排序）
+ */
+function reorderMethods(methods: ObjectMethod[]): void {
+  const priorityNames = ["onFormReady", "onFormSubmit"];
+  const priorityMethods: ObjectMethod[] = [];
+  const restMethods: ObjectMethod[] = [];
+
+  for (const method of methods) {
+    if (
+      types.isIdentifier(method.key) &&
+      priorityNames.includes(method.key.name)
+    ) {
+      priorityMethods.push(method);
+    } else {
+      restMethods.push(method);
+    }
+  }
+
+  // 按priorityNames的顺序排列优先方法
+  priorityMethods.sort((a, b) => {
+    const aName = (a.key as Identifier).name;
+    const bName = (b.key as Identifier).name;
+    return priorityNames.indexOf(aName) - priorityNames.indexOf(bName);
+  });
+
+  methods.length = 0;
+  methods.push(...priorityMethods, ...restMethods);
 }
