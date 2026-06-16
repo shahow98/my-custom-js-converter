@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { Dirent } from "fs";
+import { createLogger } from "../util/logger";
+
+const logger = createLogger("scanf");
 
 export function scanfCodeFiles(
   dirPaths: string | string[],
@@ -20,7 +23,7 @@ export function scanfCodeFiles(
 function scanfCodeFiles$0(dirPath: string, filterName: string = ""): string[] {
   const filePaths: string[] = [];
   if (!fs.existsSync(dirPath)) {
-    console.log(`路径不存在[${dirPath}]忽略`);
+    logger.warn(`dir not found, skipping: ${dirPath}`);
     return filePaths;
   }
   const files: Dirent[] = fs.readdirSync(dirPath, {

@@ -20,6 +20,9 @@ import { relative } from "path";
 import { EOL } from "os";
 import { getParentRootDir } from "./parent_path";
 import { config } from "../config";
+import { createLogger } from "./logger";
+
+const logger = createLogger("ast");
 
 export type AstType = Node | Node[] | null | undefined;
 
@@ -76,7 +79,7 @@ export function getRequireModPaths(
             if (item.init.callee.name === "require") {
               if (types.isIdentifier(item.id)) {
                 if (ignoreMod?.includes(item.id.name)) {
-                  console.log(`ignore module => ${item.id.name}`);
+                  logger.info(`ignore module: ${item.id.name}`);
                 } else {
                   return true;
                 }

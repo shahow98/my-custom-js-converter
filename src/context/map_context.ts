@@ -13,6 +13,9 @@ import {
 import { getParentRootDir } from "../util/parent_path";
 import { config } from "../config";
 import { EOL } from "os";
+import { createLogger } from "../util/logger";
+
+const logger = createLogger("map");
 
 export class MapContext {
   static SAVE_FILE = "mod.map";
@@ -84,7 +87,7 @@ export class MapContext {
 
   static readFromLocal(inDir: string): MapContext {
     const inPath = path.join(inDir, MapContext.SAVE_FILE);
-    console.log(`input map => ${inPath}`);
+    logger.info(`read map: ${inPath}`);
     try {
       const json = fs.readFileSync(inPath, { encoding: "utf-8" });
       const map = JSON.parse(json) as MapConfig;
@@ -94,7 +97,7 @@ export class MapContext {
       );
       return mapContext;
     } catch (err) {
-      console.log("the map is not found!");
+      logger.warn("map file not found");
       // console.log(err);
     }
     return new MapContext();
@@ -109,7 +112,7 @@ export class MapContext {
 
   private writeToLocal() {
     const outPath = path.join(this.outDir, MapContext.SAVE_FILE);
-    console.log(`output map => ${outPath}`);
+    logger.info(`write map: ${outPath}`);
     const json = JSON.stringify(this.map, null, 4);
     try {
       fs.accessSync(this.outDir);
@@ -126,7 +129,7 @@ export class MapContext {
       getObjectMethodsByEntryAndMethodNames(srcAst, entry)
     );
     if (!srcMethodNames.length) {
-      console.log(`not found entry => ${entry}`);
+      logger.warn(`entry not found: ${entry}`);
       this.appendModMap(new Mod(inPath, new Dependencies()), root, entry);
       return;
     }

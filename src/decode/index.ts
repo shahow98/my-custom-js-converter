@@ -18,19 +18,34 @@ import {
   getVersionLogPrefix
 } from "../util/version";
 import { ObjectMethod, Identifier } from "@babel/types";
+import { createLogger } from "../util/logger";
+
+const logger = createLogger("decode");
 
 (async function decoding(config: MainConfig) {
   const targetDirs = scanfCodeDirs(config.baseDir, config.target);
-  console.log("scanf dirs => ");
-  console.log(targetDirs);
+
+  logger.step("扫描目录");
+  logger.info(`目标目录: ${targetDirs.join(", ")}`);
+
   const codeFiles = scanfCodeFiles(targetDirs, config.decode.file);
-  for (const inPath of codeFiles) {
-    console.log(`scanf file => ${inPath}`);
+  logger.info(`找到 ${codeFiles.length} 个编码文件 (${config.decode.file})`);
+
+  for (let i = 0; i < codeFiles.length; i++) {
+    const inPath = codeFiles[i];
     const outPath = path.join(path.dirname(inPath), config.decode.output);
     const settingDir = path.join(path.dirname(inPath), config.settingDir);
+
+    logger.step(`解码处理 [${i + 1}/${codeFiles.length}]`);
+    logger.info(`源文件: ${inPath}`);
+
     await decoding$0(inPath, outPath, config, settingDir);
-    console.log(`output => ${outPath}`);
+
+    logger.info(`输出: ${outPath}`);
   }
+
+  logger.step("完成");
+  logger.info(`共处理 ${codeFiles.length} 个文件`);
 })(config);
 
 /**

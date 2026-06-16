@@ -21,17 +21,28 @@ import {
 import { types } from "@babel/core";
 import traverse from "@babel/traverse";
 import { Node } from "@babel/core";
+import { createLogger } from "../util/logger";
+
+const logger = createLogger("encode");
 
 (function encoding(config: MainConfig) {
   const encodeConfig = config.encode;
   const targetDirs = scanfCodeDirs(config.baseDir, config.target);
-  console.log("scanf dirs => ");
-  console.log(targetDirs);
+
+  logger.step("扫描目录");
+  logger.info(`目标目录: ${targetDirs.join(", ")}`);
+
   const codeFiles = scanfCodeFiles(targetDirs, encodeConfig.file);
-  codeFiles.forEach((inPath) => {
+  logger.info(`找到 ${codeFiles.length} 个入口文件 (${encodeConfig.file})`);
+
+  let totalMethods = 0;
+  codeFiles.forEach((inPath, index) => {
     const workDir = path.dirname(inPath);
     const settingDir = path.join(workDir, config.settingDir);
-    console.log(`scanf file => ${inPath}`);
+
+    logger.step(`编码处理 [${index + 1}/${codeFiles.length}]`);
+    logger.info(`源文件: ${inPath}`);
+
     const mapContext = new MapContext(
       inPath,
       encodeConfig.entry,
@@ -40,6 +51,7 @@ import { Node } from "@babel/core";
     );
 
     const methods = encoding$0(mapContext, encodeConfig.entry);
+    totalMethods += methods.length;
 
     // 读取或创建版本号
     const version = readOrCreateVersion(settingDir);
@@ -49,19 +61,22 @@ import { Node } from "@babel/core";
     reorderMethods(methods);
 
     const outPath = path.join(workDir, encodeConfig.output);
-    console.log(`output file => ${outPath}`);
     outputObjectMethods(outPath, methods);
+    logger.info(`方法数: ${methods.length}, 版本: ${version}`);
+    logger.info(`输出: ${outPath}`);
 
     // 版本号递增并写入
     incrementVersion(settingDir);
   });
+
+  logger.step("完成");
+  logger.info(`共处理 ${codeFiles.length} 个文件, ${totalMethods} 个方法`);
 })(config);
 
 function encoding$0(mapContext: MapContext, entry: string): ObjectMethod[] {
   const modNames = mapContext.getModNames();
   return modNames.flatMap((name) => {
     const srcAst = parseSrcAst(mapContext.getAbsoluteSrcPathByMod(name));
-    // console.log(`import => ${name}`);
     const srcMethods = [];
     const self = name === "self";
     if (self) {
