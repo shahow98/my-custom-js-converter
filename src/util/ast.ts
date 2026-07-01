@@ -429,7 +429,8 @@ export function importMods(
         .replace(/\\/g, "/")
         .replace(/\/index\.js$/, "")
         .replace(/\.js$/, "");
-      requireFrom = "@" + aliasPath;
+      // 确保 @ 别名路径格式为 @/xxx（@ 与路径之间必须有 /）
+      requireFrom = aliasPath.startsWith("/") ? "@" + aliasPath : "@/" + aliasPath;
     } else {
       requireFrom = relative(
         outDir,
