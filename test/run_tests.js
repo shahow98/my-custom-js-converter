@@ -405,6 +405,64 @@ function testDecodeRestoresMissingDepCalls() {
   log('TEST', '✓ Missing dep calls restored in decoded.js');
 }
 
+/**
+ * 模拟用户真实场景：mod.map 中 drawer/form mod 条目存在（有 src），
+ * 但 self.dependencies 未引用它们（未及时更新）。
+ * 只删除 self.dependencies 中的引用，保留独立 mod 条目。
+ */
+function stripDepReferencesFromMap() {
+  log('SETUP', '模拟 mod.map 中 mod 条目存在但未被任何 mod 引用（用户真实场景）');
+
+  const mapPath = path.join(tempDir, 'src', '.setting', 'mod.map');
+  const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+  // 从 self.dependencies 删除引用
+  delete map.self.dependencies.drawer;
+  delete map.self.dependencies.form;
+  // 清空 drawer/form mod 自身的 dependencies（模拟用户 mod.map：mod 条目存在但 deps 为空，
+  // 即该 mod 未被任何 mod 引用，deleteModMethods 的 deps 并集不含它们）
+  if (map.drawer) map.drawer.dependencies = {};
+  if (map.form) map.form.dependencies = {};
+  fs.writeFileSync(mapPath, JSON.stringify(map, null, 4), 'utf-8');
+
+  log('SETUP', '已删除 drawer/form 的 self 引用并清空其 dependencies（保留 mod 条目与 src）');
+}
+
+function testDecodeReferencesExistingMod() {
+  log('TEST', 'Decode references existing mod entries into self.dependencies');
+
+  const mapPath = path.join(tempDir, 'src', '.setting', 'mod.map');
+  const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+
+  // self.dependencies 应重新引用 drawer/form
+  assert.ok(map.self && map.self.dependencies && map.self.dependencies.drawer,
+    'mod.map should re-reference self.dependencies.drawer');
+  assert.ok(map.self && map.self.dependencies && map.self.dependencies.form,
+    'mod.map should re-reference self.dependencies.form');
+
+  log('TEST', '✓ Existing mod entries referenced into self.dependencies');
+}
+
+function testDecodeRestoresExistingModCalls() {
+  log('TEST', 'Decode restores calls for existing-but-unreferenced mods');
+
+  const decodedPath = path.join(tempDir, 'src', 'decoded.js');
+  const decoded = fs.readFileSync(decodedPath, 'utf-8');
+
+  // this.pop__drawer(...) 应被还原为 drawer.pop(...)
+  assert.ok(decoded.includes('drawer.pop'),
+    'this.pop__drawer should be restored to drawer.pop');
+  assert.ok(decoded.includes('form.setValue'),
+    'this.setValue__form should be restored to form.setValue');
+
+  // 应生成 require 语句
+  assert.ok(/const\s+drawer\s*=\s*require/.test(decoded),
+    'should generate "const drawer = require(...)"');
+  assert.ok(/const\s+form\s*=\s*require/.test(decoded),
+    'should generate "const form = require(...)"');
+
+  log('TEST', '✓ Existing mod calls restored in decoded.js');
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 function main() {
@@ -482,6 +540,40 @@ function main() {
     ];
 
     for (const test of decodeTests) {
+      try {
+        test();
+        passed++;
+      } catch (err) {
+        failed++;
+        errors.push({ test: test.name, error: err.message });
+        console.error(`  ✗ ${test.name}: ${err.message}`);
+      }
+    }
+
+    // ── Decode 测试（场景二：mod 条目存在但 self 未引用）──
+    log('PHASE', '═══ DECODE (existing mod, no self reference) ═══');
+
+    // 重新 encode 以重置 mod.map（恢复完整依赖）
+    try {
+      runEncode();
+    } catch (err) {
+      console.error('Re-encode command failed:', err.message);
+      throw err;
+    }
+    // 模拟 mod 条目存在但 self.dependencies 未引用
+    stripDepReferencesFromMap();
+    try {
+      runDecode();
+    } catch (err) {
+      console.error('Decode (scenario 2) command failed:', err.message);
+      throw err;
+    }
+
+    const decodeScenario2Tests = [
+      testDecodeReferencesExistingMod,
+      testDecodeRestoresExistingModCalls,
+    ];
+    for (const test of decodeScenario2Tests) {
       try {
         test();
         passed++;

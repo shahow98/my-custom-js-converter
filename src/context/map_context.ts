@@ -94,7 +94,22 @@ export class MapContext {
    * @param absoluteSrcPath - 依赖文件的绝对路径
    */
   appendMissingDep(depName: string, absoluteSrcPath: string) {
-    // self.dependencies[depName] = { methods: [] }
+    this.referenceDep(depName);
+    // map[depName] = { src: <相对 parentRootDir 的路径>, dependencies: {} }
+    const parentRootDir = getParentRootDir();
+    const src = parentRootDir
+      ? path.relative(parentRootDir, absoluteSrcPath)
+      : absoluteSrcPath;
+    this.appendModMap(new Mod(src, new Dependencies()), false, depName);
+  }
+
+  /**
+   * 仅将已有 mod 条目引用到 self.dependencies（不新增/覆盖 mod 条目）。
+   * 用于 mod.map 中 mod 条目已存在（有 src）但未被 self 引用的情况：
+   * 只需让 importMods 生成 require、deleteModMethods 还原调用即可。
+   * @param depName - 依赖名（如 "drawer"）
+   */
+  referenceDep(depName: string) {
     const selfMod = this.getMod("self");
     if (selfMod) {
       selfMod.dependencies[depName] = new Dependency([]);
@@ -103,12 +118,6 @@ export class MapContext {
       mod.dependencies[depName] = new Dependency([]);
       this.appendModMap(mod, true);
     }
-    // map[depName] = { src: <相对 parentRootDir 的路径>, dependencies: {} }
-    const parentRootDir = getParentRootDir();
-    const src = parentRootDir
-      ? path.relative(parentRootDir, absoluteSrcPath)
-      : absoluteSrcPath;
-    this.appendModMap(new Mod(src, new Dependencies()), false, depName);
   }
 
   /**

@@ -155,10 +155,13 @@ function supplementMissingDeps(
     return false;
   }
 
-  // 收集已知依赖名（所有 mod 名 + 所有 dependency 名）
+  // 收集已知依赖名：所有 mod 的 dependencies 的并集。
+  // 注意判定标准必须与 deleteModMethods 一致——一个 __{mod} 后缀能被还原，
+  // 当且仅当 mod 出现在某个 mod 的 dependencies 中（而非仅仅是 mod 名存在于 map）。
+  // 否则 mod 条目存在但未被任何 mod 引用时（如 self.dependencies 缺少该依赖），
+  // 调用既不会还原也不会 require，需识别为"未知"并补充到 self.dependencies。
   const knownDeps = new Set<string>();
   mapContext.getModNames().forEach((modName) => {
-    knownDeps.add(modName);
     mapContext.getDependencyNameByMod(modName).forEach((dep) => knownDeps.add(dep));
   });
 
@@ -169,6 +172,15 @@ function supplementMissingDeps(
 
   let supplemented = false;
   unknownDeps.forEach((depName) => {
+    // 若 mod.map 已有该 mod 条目且 src 有效，只需补到 self.dependencies 即可，
+    // 无需重新搜索 libs（避免重名冲突和不必要的 src 覆盖）。
+    const existingSrc = mapContext.getSrcPathByMod(depName);
+    if (existingSrc) {
+      mapContext.referenceDep(depName);
+      logger.info(`补充依赖引用: ${depName}（复用已有 src: ${existingSrc}）`);
+      supplemented = true;
+      return;
+    }
     const candidates = scanfLibMod(libDirs, depName);
     if (candidates.length === 0) {
       logger.warn(`未找到依赖文件: ${depName}（在 libs 目录中无匹配）`);
