@@ -3,6 +3,10 @@
   "version": "1.6.1",
   "description": "自定义代码转换器",
   "main": "index.js",
+  "files": [
+    "core/**/*.js",
+    "README.md"
+  ],
   "bin": {
     "encode": "core/encode/index.js",
     "decode": "core/decode/index.js"
