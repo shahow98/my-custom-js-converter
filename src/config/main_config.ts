@@ -5,6 +5,11 @@ export interface MainConfig {
   target: string[];
   settingDir: string;
   customConfig: string;
+  /**
+   * 依赖库搜索目录数组，用于 decode 时补充缺失依赖。
+   * 支持 "@/util" 别名路径（@ 代表项目根目录）和 "util" 相对 baseDir 路径。
+   */
+  libs: string[];
 }
 
 export interface EncodeConfig {

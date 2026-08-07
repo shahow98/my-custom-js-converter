@@ -24,6 +24,9 @@ function setupTempProject() {
   const srcDir = path.join(tempDir, 'src');
   const utilDir = path.join(srcDir, 'util');
   fs.mkdirSync(utilDir, { recursive: true });
+  // libs 目录（通用依赖库，对应 config.libs: ["@/util"]）
+  const libUtilDir = path.join(tempDir, 'util');
+  fs.mkdirSync(libUtilDir, { recursive: true });
 
   // Copy fixture source files
   fs.copyFileSync(
@@ -37,6 +40,15 @@ function setupTempProject() {
   fs.copyFileSync(
     path.join(FIXTURE_DIR, 'src', 'helper.js'),
     path.join(srcDir, 'helper.js')
+  );
+  // Copy libs 依赖文件
+  fs.copyFileSync(
+    path.join(FIXTURE_DIR, 'util', 'drawer.js'),
+    path.join(libUtilDir, 'drawer.js')
+  );
+  fs.copyFileSync(
+    path.join(FIXTURE_DIR, 'util', 'form.js'),
+    path.join(libUtilDir, 'form.js')
   );
 
   // Copy config.json to parent project root
@@ -128,6 +140,8 @@ function testEncodeMapStructure() {
   assert.ok(map.self.dependencies, 'self should have dependencies');
   assert.ok(map.self.dependencies.util, 'self should depend on util');
   assert.ok(map.self.dependencies.helper, 'self should depend on helper');
+  assert.ok(map.self.dependencies.drawer, 'self should depend on drawer');
+  assert.ok(map.self.dependencies.form, 'self should depend on form');
 
   // Verify dependency method lists
   const utilMethods = map.self.dependencies.util.methods;
@@ -140,6 +154,8 @@ function testEncodeMapStructure() {
   // Verify util and helper module entries exist
   assert.ok(map.util, 'mod.map should have "util" entry');
   assert.ok(map.helper, 'mod.map should have "helper" entry');
+  assert.ok(map.drawer, 'mod.map should have "drawer" entry');
+  assert.ok(map.form, 'mod.map should have "form" entry');
 
   log('TEST', `✓ mod.map has keys: ${Object.keys(map).join(', ')}`);
 }
@@ -153,12 +169,16 @@ function testEncodeMethodRenaming() {
   // Encoded file should contain methods with __modName suffix
   assert.ok(coded.includes('__util'), 'Encoded file should contain __util suffix');
   assert.ok(coded.includes('__helper'), 'Encoded file should contain __helper suffix');
+  assert.ok(coded.includes('__drawer'), 'Encoded file should contain __drawer suffix');
+  assert.ok(coded.includes('__form'), 'Encoded file should contain __form suffix');
 
   // Specific renamed methods should exist
   assert.ok(coded.includes('fetchData__util'), 'fetchData__util should exist');
   assert.ok(coded.includes('formatData__util'), 'formatData__util should exist');
   assert.ok(coded.includes('validate__helper'), 'validate__helper should exist');
   assert.ok(coded.includes('transform__helper'), 'transform__helper should exist');
+  assert.ok(coded.includes('pop__drawer'), 'pop__drawer should exist');
+  assert.ok(coded.includes('setValue__form'), 'setValue__form should exist');
 
   log('TEST', '✓ Method renaming confirmed in coded.js');
 }
@@ -188,6 +208,8 @@ function testEncodeThisCallsRenamed() {
   assert.ok(coded.includes('this.validate__helper'), 'this.validate__helper should exist');
   assert.ok(coded.includes('this.fetchData__util'), 'this.fetchData__util should exist');
   assert.ok(coded.includes('this.transform__helper'), 'this.transform__helper should exist');
+  assert.ok(coded.includes('this.pop__drawer'), 'this.pop__drawer should exist');
+  assert.ok(coded.includes('this.setValue__form'), 'this.setValue__form should exist');
 
   log('TEST', '✓ Dependency method calls renamed to this.method__dep()');
 }
@@ -266,6 +288,10 @@ function testDecodeRestoresMethodNames() {
     'Decoded file should call util methods via util.method()');
   assert.ok(decoded.includes('helper.validate') || decoded.includes('helper.transform'),
     'Decoded file should call helper methods via helper.method()');
+  assert.ok(decoded.includes('drawer.pop'),
+    'Decoded file should call drawer methods via drawer.method()');
+  assert.ok(decoded.includes('form.setValue'),
+    'Decoded file should call form methods via form.method()');
 
   log('TEST', '✓ Original method call patterns restored in decoded.js');
 }
@@ -304,10 +330,79 @@ function testDecodeNoDoubleSuffix() {
   const decoded = fs.readFileSync(decodedPath, 'utf-8');
 
   // No method names should have __suffix pattern remaining
-  const hasDoubleUnderscoreSuffix = /\w+__(util|helper)/.test(decoded);
+  const hasDoubleUnderscoreSuffix = /\w+__(util|helper|drawer|form)/.test(decoded);
   assert.ok(!hasDoubleUnderscoreSuffix, 'Decoded file should not contain any __modName suffixes');
 
   log('TEST', '✓ No __modName suffixes remain in decoded.js');
+}
+
+/**
+ * 模拟本地 mod.map 缺失 drawer/form 依赖（未及时更新）
+ * 从 mod.map 中删除 drawer 和 form 条目及 self 对它们的依赖
+ */
+function stripMissingDepsFromMap() {
+  log('SETUP', '模拟 mod.map 缺失 drawer/form 依赖');
+
+  const mapPath = path.join(tempDir, 'src', '.setting', 'mod.map');
+  const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+  delete map.self.dependencies.drawer;
+  delete map.self.dependencies.form;
+  delete map.drawer;
+  delete map.form;
+  fs.writeFileSync(mapPath, JSON.stringify(map, null, 4), 'utf-8');
+
+  log('SETUP', '已从 mod.map 删除 drawer/form 条目');
+}
+
+function testDecodeSupplementsMissingDeps() {
+  log('TEST', 'Decode supplements missing deps into mod.map');
+
+  const mapPath = path.join(tempDir, 'src', '.setting', 'mod.map');
+  const map = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
+
+  // drawer 和 form 应被自动补充回 mod.map
+  assert.ok(map.self && map.self.dependencies && map.self.dependencies.drawer,
+    'mod.map should have self.dependencies.drawer supplemented');
+  assert.ok(map.self && map.self.dependencies && map.self.dependencies.form,
+    'mod.map should have self.dependencies.form supplemented');
+  assert.ok(map.drawer, 'mod.map should have "drawer" entry supplemented');
+  assert.ok(map.form, 'mod.map should have "form" entry supplemented');
+
+  // 补充的 src 路径应指向 libs 目录下的文件
+  assert.ok(map.drawer.src && map.drawer.src.includes('drawer'),
+    'drawer src should point to drawer file');
+  assert.ok(map.form.src && map.form.src.includes('form'),
+    'form src should point to form file');
+
+  log('TEST', '✓ Missing deps supplemented in mod.map');
+}
+
+function testDecodeRestoresMissingDepCalls() {
+  log('TEST', 'Decode restores missing dep calls (this.pop__drawer -> drawer.pop)');
+
+  const decodedPath = path.join(tempDir, 'src', 'decoded.js');
+  const decoded = fs.readFileSync(decodedPath, 'utf-8');
+
+  // this.pop__drawer(...) 应被还原为 drawer.pop(...)
+  assert.ok(decoded.includes('drawer.pop'),
+    'this.pop__drawer should be restored to drawer.pop');
+  // this.setValue__form(...) 应被还原为 form.setValue(...)
+  assert.ok(decoded.includes('form.setValue'),
+    'this.setValue__form should be restored to form.setValue');
+
+  // 内联的依赖方法定义应被删除
+  assert.ok(!decoded.includes('pop__drawer'),
+    'pop__drawer definition should be removed');
+  assert.ok(!decoded.includes('setValue__form'),
+    'setValue__form definition should be removed');
+
+  // 应生成 require 语句
+  assert.ok(/const\s+drawer\s*=\s*require/.test(decoded),
+    'should generate "const drawer = require(...)"');
+  assert.ok(/const\s+form\s*=\s*require/.test(decoded),
+    'should generate "const form = require(...)"');
+
+  log('TEST', '✓ Missing dep calls restored in decoded.js');
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -362,6 +457,11 @@ function main() {
 
     // ── Decode tests ──
     log('PHASE', '═══ DECODE ═══');
+
+    // 模拟本地 mod.map 缺失 drawer/form 依赖（未及时更新）
+    // decode 应自动从 config.libs 目录找回并补充 mod.map
+    stripMissingDepsFromMap();
+
     try {
       runDecode();
     } catch (err) {
@@ -377,6 +477,8 @@ function main() {
       testDecodeMountVariable,
       testDecodeSelfMethodsPreserved,
       testDecodeNoDoubleSuffix,
+      testDecodeSupplementsMissingDeps,
+      testDecodeRestoresMissingDepCalls,
     ];
 
     for (const test of decodeTests) {

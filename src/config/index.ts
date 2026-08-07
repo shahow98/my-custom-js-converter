@@ -22,6 +22,7 @@ function initConfig(): MainConfig {
     target: [""],
     settingDir: ".setting",
     customConfig: "config.js",
+    libs: [],
   };
 
   const curDir = __dirname;

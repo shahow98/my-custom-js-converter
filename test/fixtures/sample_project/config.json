@@ -13,5 +13,6 @@
   },
   "target": ["src"],
   "settingDir": ".setting",
-  "customConfig": "config.json"
+  "customConfig": "config.json",
+  "libs": ["@/util"]
 }

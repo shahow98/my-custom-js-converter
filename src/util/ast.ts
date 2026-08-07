@@ -562,3 +562,43 @@ export function getInlineMethodsByMethodName(
   });
   return [...inlineMethods];
 }
+
+/**
+ * 从 coded.js 的 AST 中提取未知的依赖名（__{mod} 后缀中的 mod）
+ * 扫描 ObjectMethod 的 key 和 MemberExpression 的 property，提取 xxx__yyy 中的 yyy，
+ * 排除已知依赖名（mod.map 中已有的依赖）。
+ * @param srcAst - 源码AST
+ * @param knownDeps - 已知依赖名集合
+ * @returns 未知依赖名数组（去重）
+ */
+export function getUnknownDepNames(
+  srcAst: AstType,
+  knownDeps: Set<string>
+): string[] {
+  const depNames = new Set<string>();
+  const collect = (name: string) => {
+    const split = name.split("__");
+    if (split.length < 2) {
+      return;
+    }
+    // 取最后一段作为依赖名（与 deleteModMethods 的解析逻辑一致）
+    const depName = split[split.length - 1];
+    if (!depName || knownDeps.has(depName)) {
+      return;
+    }
+    depNames.add(depName);
+  };
+  traverse(srcAst as Node, {
+    ObjectMethod(path) {
+      if (types.isIdentifier(path.node.key)) {
+        collect(path.node.key.name);
+      }
+    },
+    MemberExpression(path) {
+      if (types.isIdentifier(path.node.property)) {
+        collect(path.node.property.name);
+      }
+    }
+  });
+  return [...depNames];
+}

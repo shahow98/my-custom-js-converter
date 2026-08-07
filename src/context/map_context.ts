@@ -85,6 +85,48 @@ export class MapContext {
       : srcPath;
   }
 
+  /**
+   * 补充缺失的依赖到 mod.map
+   * 在 self.dependencies 下新增该依赖（让 importMods 生成 require），
+   * 并新增独立的 mod 条目（让 getAbsoluteSrcPathByMod 拿到源文件路径）。
+   * methods 留空数组，后续 npx encode 会自动补全。
+   * @param depName - 依赖名（如 "drawer"）
+   * @param absoluteSrcPath - 依赖文件的绝对路径
+   */
+  appendMissingDep(depName: string, absoluteSrcPath: string) {
+    // self.dependencies[depName] = { methods: [] }
+    const selfMod = this.getMod("self");
+    if (selfMod) {
+      selfMod.dependencies[depName] = new Dependency([]);
+    } else {
+      const mod = new Mod("", new Dependencies());
+      mod.dependencies[depName] = new Dependency([]);
+      this.appendModMap(mod, true);
+    }
+    // map[depName] = { src: <相对 parentRootDir 的路径>, dependencies: {} }
+    const parentRootDir = getParentRootDir();
+    const src = parentRootDir
+      ? path.relative(parentRootDir, absoluteSrcPath)
+      : absoluteSrcPath;
+    this.appendModMap(new Mod(src, new Dependencies()), false, depName);
+  }
+
+  /**
+   * 将当前 map 写入指定目录的 mod.map 文件
+   * @param outDir - 输出目录
+   */
+  writeToLocalDir(outDir: string) {
+    const outPath = path.join(outDir, MapContext.SAVE_FILE);
+    logger.info(`write map: ${outPath}`);
+    const json = JSON.stringify(this.map, null, 4);
+    try {
+      fs.accessSync(outDir);
+    } catch (err) {
+      fs.mkdirSync(outDir);
+    }
+    fs.writeFileSync(outPath, json.replace(/\n/gm, EOL), "utf-8");
+  }
+
   static readFromLocal(inDir: string): MapContext {
     const inPath = path.join(inDir, MapContext.SAVE_FILE);
     logger.info(`read map: ${inPath}`);
@@ -111,15 +153,7 @@ export class MapContext {
   }
 
   private writeToLocal() {
-    const outPath = path.join(this.outDir, MapContext.SAVE_FILE);
-    logger.info(`write map: ${outPath}`);
-    const json = JSON.stringify(this.map, null, 4);
-    try {
-      fs.accessSync(this.outDir);
-    } catch (err) {
-      fs.mkdirSync(this.outDir);
-    }
-    fs.writeFileSync(outPath, json.replace(/\n/gm, EOL), "utf-8");
+    this.writeToLocalDir(this.outDir);
   }
 
   private buildMapContext(inPath: string, entry: string, root: boolean) {

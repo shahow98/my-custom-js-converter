@@ -54,6 +54,81 @@ export function scanfCodeDirs(baseDir: string, targetDirs: string[]): string[] {
 }
 
 /**
+ * 将 libs 配置解析为绝对路径数组
+ * 支持 "@/util" 别名路径（@ 代表项目根目录 rootDir）和 "util" 相对 baseDir 路径
+ * @param libs - libs 配置数组
+ * @param baseDir - 基础目录（相对路径的基准）
+ * @param rootDir - 项目根目录（@ 别名的基准，未提供时 @ 路径会被跳过并警告）
+ * @returns 绝对路径数组
+ */
+export function resolveLibDirs(
+  libs: string[],
+  baseDir: string,
+  rootDir?: string
+): string[] {
+  return libs
+    .map((lib) => {
+      if (lib.startsWith("@/") || lib.startsWith("@\\")) {
+        if (!rootDir) {
+          logger.warn(`@ 别名路径需要 rootDir，已跳过: ${lib}`);
+          return "";
+        }
+        const sub = lib.replace(/^@[/\\]/, "");
+        return path.join(rootDir.replace(/[\\/]$/, ""), sub);
+      }
+      return path.join(baseDir, lib.replace(/\/|\\/, path.sep));
+    })
+    .filter((dir) => dir !== "");
+}
+
+/**
+ * 在 libs 目录下搜索依赖模块文件
+ * 查找 modName.js（文件）和 modName/index.js（目录下入口）
+ * @param libDirs - 已解析的绝对路径目录数组
+ * @param modName - 依赖模块名（如 "drawer"）
+ * @returns 所有匹配的绝对路径数组
+ */
+export function scanfLibMod(libDirs: string[], modName: string): string[] {
+  const results: string[] = [];
+  const seen = new Set<string>();
+  libDirs.forEach((libDir) => {
+    if (!fs.existsSync(libDir)) {
+      return;
+    }
+    // 1. libDir/modName.js
+    const filePath = path.join(libDir, `${modName}.js`);
+    if (fs.existsSync(filePath) && !seen.has(filePath)) {
+      seen.add(filePath);
+      results.push(filePath);
+    }
+    // 2. libDir/modName/index.js（modName 为子目录）
+    const subDir = path.join(libDir, modName);
+    if (fs.existsSync(subDir) && fs.statSync(subDir).isDirectory()) {
+      const indexFile = path.join(subDir, "index.js");
+      if (fs.existsSync(indexFile) && !seen.has(indexFile)) {
+        seen.add(indexFile);
+        results.push(indexFile);
+      }
+    }
+    // 3. 递归搜索子目录（通用方法可能嵌套在子目录下）
+    const subDirs = fs
+      .readdirSync(libDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => path.join(libDir, d.name));
+    subDirs.forEach((sub) => {
+      const nested = scanfLibMod([sub], modName);
+      nested.forEach((p) => {
+        if (!seen.has(p)) {
+          seen.add(p);
+          results.push(p);
+        }
+      });
+    });
+  });
+  return results;
+}
+
+/**
  * 扫描引入路径
  * require('../../util')
  *   - is dir ../../util/index.js

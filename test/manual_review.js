@@ -36,6 +36,9 @@ function setupTempProject() {
   const srcDir = path.join(tempDir, 'src');
   const utilDir = path.join(srcDir, 'util');
   fs.mkdirSync(utilDir, { recursive: true });
+  // libs 目录（通用依赖库，对应 config.libs: ["@/util"]）
+  const libUtilDir = path.join(tempDir, 'util');
+  fs.mkdirSync(libUtilDir, { recursive: true });
 
   // 复制 fixture 源文件
   fs.copyFileSync(
@@ -49,6 +52,15 @@ function setupTempProject() {
   fs.copyFileSync(
     path.join(FIXTURE_DIR, 'src', 'helper.js'),
     path.join(srcDir, 'helper.js')
+  );
+  // 复制 libs 依赖文件
+  fs.copyFileSync(
+    path.join(FIXTURE_DIR, 'util', 'drawer.js'),
+    path.join(libUtilDir, 'drawer.js')
+  );
+  fs.copyFileSync(
+    path.join(FIXTURE_DIR, 'util', 'form.js'),
+    path.join(libUtilDir, 'form.js')
   );
 
   // 复制 config.json 并动态设置 baseDir
@@ -212,6 +224,8 @@ async function main() {
     showFile('原始文件: src/index.js (入口)', path.join(tempDir, 'src', 'index.js'));
     showFile('原始文件: src/util/index.js (依赖模块)', path.join(tempDir, 'src', 'util', 'index.js'));
     showFile('原始文件: src/helper.js (依赖模块)', path.join(tempDir, 'src', 'helper.js'));
+    showFile('原始文件: util/drawer.js (libs 依赖)', path.join(tempDir, 'util', 'drawer.js'));
+    showFile('原始文件: util/form.js (libs 依赖)', path.join(tempDir, 'util', 'form.js'));
 
     await askQuestion(color('\n按 Enter 继续执行 encode ...', TERMINAL_COLORS.yellow));
 
