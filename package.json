@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "npx tsc --build",
+    "prepublishOnly": "npm run build",
     "test": "npm run build && node test/run_tests.js",
     "test:manual": "npm run build && node test/manual_review.js"
   },
