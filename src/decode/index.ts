@@ -15,6 +15,7 @@ import { scanfCodeDirs, scanfCodeFiles, resolveLibDirs, scanfLibMod } from "../s
 import { deleteModMethods, getUnknownDepNames, importMods } from "../util/ast";
 import {
   writeVersion,
+  incrementVersionValue,
   getVersionMethodName,
   getVersionLogPrefix
 } from "../util/version";
@@ -282,7 +283,7 @@ function askConflictChoice(
 }
 
 /**
- * 从onFormReady方法中提取版本日志并移除，将版本号写入version文件
+ * 从onFormReady方法中提取版本日志并移除，将版本号加1后写入version文件
  * @param srcAst - 源码AST
  * @param settingDir - setting目录路径
  */
@@ -333,8 +334,8 @@ function extractAndRemoveVersionLog(srcAst: Node, settingDir: string): void {
     }
   });
 
-  // 将版本号写入version文件
+  // 将版本号写入version文件（加1，避免下次encode生成与源码相同的版本号）
   if (extractedVersion) {
-    writeVersion(settingDir, extractedVersion);
+    writeVersion(settingDir, incrementVersionValue(extractedVersion));
   }
 }

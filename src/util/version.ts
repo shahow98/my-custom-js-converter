@@ -28,8 +28,21 @@ export function readOrCreateVersion(settingDir: string): string {
 export function incrementVersion(settingDir: string): void {
   const versionPath = path.join(settingDir, VERSION_FILE);
   const current = readOrCreateVersion(settingDir);
-  const next = padVersion(parseInt(current, 10) + 1);
+  const next = incrementVersionValue(current);
   fs.writeFileSync(versionPath, next, "utf-8");
+}
+
+/**
+ * 对给定版本号加1并补零
+ * @param version - 当前版本号字符串
+ * @returns 递增后的版本号字符串；若版本号非数字则返回初始版本
+ */
+export function incrementVersionValue(version: string): string {
+  const num = parseInt(version, 10);
+  if (Number.isNaN(num)) {
+    return INITIAL_VERSION;
+  }
+  return padVersion(num + 1);
 }
 
 /**
