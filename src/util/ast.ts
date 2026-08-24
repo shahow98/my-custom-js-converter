@@ -36,18 +36,43 @@ export function parseSrcAst(srcPath?: string): AstType {
   return parse(src);
 }
 
+/**
+ * 修复 Babel generator 对对象字面量/方法属性间行注释的错位问题。
+ *
+ * Babel 解析 `prop, // comment\n  nextProp` 时，会把 `// comment` 挂到下一个
+ * 属性的 leadingComments，生成时输出在下一属性上方，导致注释视觉上"下移一行"。
+ * 此函数将 `,\n  // comment\n  标识符` 还原为 `, // comment\n  标识符`。
+ */
+function fixMisplacedLineComments(code: string): string {
+  // 1. 先处理连续两行注释、其中第一个本应属于上一属性行尾的情况：
+  //    `prop,\n  //c1\n  //c2\n  nextKey` → `prop, //c1\n  //c2\n  nextKey`
+  //    （c1 上移到上一属性行尾，c2 保持独占行）
+  code = code.replace(
+    /,\r?\n(\s*)(\/\/[^\r\n]*)\r?\n(\s*)(\/\/[^\r\n]*)\r?\n(\s*)(\w)/g,
+    (_m, sp1, c1, sp2, c2, sp3, key) => `, ${c1}\r\n${sp2}${c2}\r\n${sp3}${key}`
+  );
+  // 2. 再处理单个行注释错位：
+  //    `prop,\n  //comment\n  nextKey` → `prop, //comment\n  nextKey`
+  code = code.replace(
+    /,\r?\n(\s*)(\/\/[^\r\n]*)\r?\n(\s*)(\w)/g,
+    (_m, _sp1, comment, sp2, key) => `, ${comment}\r\n${sp2}${key}`
+  );
+  return code;
+}
+
 export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
   let dist = methods
     .map((m) => {
-      if (m.leadingComments?.length) {
-        m.leadingComments = undefined;
-      }
+      // 保留 leadingComments：原代码会删除方法前置注释，但 Babel 会把上一个方法/属性
+      // 的行尾注释挂到当前方法的 leadingComments，删除会导致这些注释丢失。
+      // 改由 fixMisplacedLineComments 在生成后修正错位。
       return m;
     })
     .map((m) => generate(m))
     .map((m) => m.code)
     .join(`,\n`);
   dist = dist.replace(/\n/gm, EOL);
+  dist = fixMisplacedLineComments(dist);
   fs.writeFileSync(outPath, dist, "utf-8");
 }
 
