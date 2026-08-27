@@ -122,27 +122,38 @@ async function decoding$0(
     mapContext.writeToLocalDir(settingDir);
   }
 
-  importMods(path.dirname(outPath), srcAst, mapContext, config.encode.useAlias);
-
   // 稽核内联工具方法体是否与源文件一致（忽略注释）
+  // 必须在 importMods 之前：有不一致方法的依赖不生成 require（方案B：自包含）
   const mismatches = auditModMethods(srcAst, mapContext);
-  const skipMethodKeys = new Set<string>();
+  const skipDepNames = new Set<string>();
   if (mismatches.length) {
+    // 推导出有不一致方法的依赖名集合：该依赖所有方法都保留内联，不 require
+    mismatches.forEach((m) => skipDepNames.add(m.modName));
     logger.warn(
-      `检测到 ${mismatches.length} 个内联工具方法与源文件不一致，将保留其内联形态不还原:`
+      `检测到 ${mismatches.length} 个内联工具方法与源文件不一致，涉及依赖: ${[
+        ...skipDepNames
+      ].join(", ")}`
+    );
+    logger.warn(
+      `以下依赖的所有方法将保留内联形态不还原（不生成 require，decoded.js 自包含）:`
     );
     mismatches.forEach((m) => {
-      logger.warn(
-        `  - ${m.methodKey}（源文件: ${m.srcPath}）`
-      );
-      skipMethodKeys.add(m.methodKey);
+      logger.warn(`  - ${m.methodKey}（源文件: ${m.srcPath}）`);
     });
     logger.warn(
       `请检查上述方法，确认 coded.js 与源文件差异后手动处理或重新 encode。`
     );
   }
 
-  deleteModMethods(srcAst, mapContext, skipMethodKeys);
+  importMods(
+    path.dirname(outPath),
+    srcAst,
+    mapContext,
+    config.encode.useAlias,
+    skipDepNames
+  );
+
+  deleteModMethods(srcAst, mapContext, skipDepNames);
 
   // 从onFormReady方法中提取版本日志并移除
   extractAndRemoveVersionLog(srcAst, settingDir);

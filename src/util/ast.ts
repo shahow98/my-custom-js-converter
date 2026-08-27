@@ -450,9 +450,12 @@ export function importMods(
   outDir: string,
   srcAst: AstType,
   mapContext: MapContext,
-  useAlias: boolean = false
+  useAlias: boolean = false,
+  skipDepNames: Set<string> = new Set()
 ) {
-  const depNames = mapContext.getDependencyNameByMod("self");
+  const depNames = mapContext.getDependencyNameByMod("self").filter(
+    (name) => !skipDepNames.has(name)
+  );
   const rootDir = getParentRootDir() || config.baseDir;
   const importMods = depNames.map((name) => {
     const srcPath = mapContext.getAbsoluteSrcPathByMod(name)!;
@@ -498,14 +501,14 @@ export function importMods(
  * 去除第三方模块方法
  * @param srcAst - 源码AST
  * @param mapContext
- * @param skipMethodKeys - 需要跳过（不删除、不还原）的方法完整名集合，
- *   元素形如 `method__mod`。用于稽核出方法体不一致的工具方法：
- *   保留其内联定义与 this.method__mod 调用，交由用户人工处理。
+ * @param skipDepNames - 需要跳过（不删除定义、不还原调用、不生成 require）的依赖名集合。
+ *   用于稽核出方法体不一致的依赖：该依赖任一方法与源文件不一致时，共所有方法
+ *   都保留内联形态（包括一致方法），实现 decoded.js 自包含，不 require 源文件。
  */
 export function deleteModMethods(
   srcAst: AstType,
   mapContext: MapContext,
-  skipMethodKeys: Set<string> = new Set()
+  skipDepNames: Set<string> = new Set()
 ) {
   const deps = new Set<string>();
   mapContext
@@ -523,8 +526,8 @@ export function deleteModMethods(
         return;
       }
       const depName = split.length ? split[split.length - 1] : "";
-      // 稽核不一致的方法：保留内联定义，不删除
-      if (skipMethodKeys.has(methodName)) {
+      // 稽核不一致的依赖：保留其所有内联定义，不删除
+      if (skipDepNames.has(depName)) {
         return;
       }
       deps.has(depName) && path.remove();
@@ -542,8 +545,8 @@ export function deleteModMethods(
       }
       const depName = split[split.length - 1];
       if (deps.has(depName)) {
-        // 稽核不一致的方法：保留 this.method__mod 调用形态，不还原
-        if (skipMethodKeys.has(methodName)) {
+        // 稽核不一致的依赖：保留 this.method__dep 调用形态，不还原
+        if (skipDepNames.has(depName)) {
           return;
         }
         path.node.property.name = methodName.replace(`__${depName}`, "");
