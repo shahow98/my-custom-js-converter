@@ -893,3 +893,34 @@ export function auditModMethods(
 
   return mismatches;
 }
+
+/**
+ * 检测入口对象内是否含有 `__mod` 后缀的方法定义。
+ *
+ * 用于 encode 防护：当源文件（index.js）的 mount 对象内残留带 `__mod` 后缀的方法时，
+ * 说明用户直接复用了 decode 产物（含未还原的内联工具方法）作为二开源文件。
+ * 此类源文件不应再通过 require 引入工具方法做依赖编码，否则会导致方法重复定义、
+ * mod.map 错乱。encode 检测到此场景应禁止 require 引入，只做无依赖编码。
+ *
+ * @param srcAst - 源码AST
+ * @param entry - 入口对象名
+ * @returns 含 `__mod` 后缀的方法名列表（如 `["validate__util", "fetchData__util"]`）
+ */
+export function getInlinedModMethodNames(
+  srcAst: AstType,
+  entry: string
+): string[] {
+  const inlinedNames: string[] = [];
+  // 取入口对象的所有方法，筛选出 key 含 __ 后缀的
+  const methods = getObjectMethodsByEntryAndMethodNames(srcAst, entry);
+  methods.forEach((method) => {
+    if (!types.isIdentifier(method.key)) {
+      return;
+    }
+    const name = method.key.name;
+    if (name.split("__").length >= 2) {
+      inlinedNames.push(name);
+    }
+  });
+  return inlinedNames;
+}

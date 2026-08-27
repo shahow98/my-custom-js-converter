@@ -10,7 +10,9 @@ import {
   parseSrcAst,
   getObjectMehtodsByMehtodNamesAndInsideOwnMethods,
   outputObjectMethods,
-  modifyObjectMethods
+  modifyObjectMethods,
+  getInlinedModMethodNames,
+  getRequireModPaths
 } from "../util/ast";
 import {
   readOrCreateVersion,
@@ -21,6 +23,7 @@ import {
 import { types } from "@babel/core";
 import traverse from "@babel/traverse";
 import { Node } from "@babel/core";
+import { getParentRootDir } from "../util/parent_path";
 import { createLogger } from "../util/logger";
 
 const logger = createLogger("encode");
@@ -42,6 +45,14 @@ const logger = createLogger("encode");
 
     logger.step(`编码处理 [${index + 1}/${codeFiles.length}]`);
     logger.info(`源文件: ${inPath}`);
+
+    // 防护检测：源文件 mount 对象内若残留 __mod 后缀方法，说明用户复用了 decode 产物
+    // 作为二开源文件。此时禁止通过 require 引入工具方法，只做无依赖编码。
+    const guardResult = guardInlinedModMethods(inPath, encodeConfig.entry, config);
+    if (guardResult) {
+      logger.error(guardResult);
+      return;
+    }
 
     const mapContext = new MapContext(
       inPath,
@@ -177,4 +188,60 @@ function reorderMethods(methods: ObjectMethod[]): void {
 
   methods.length = 0;
   methods.push(...priorityMethods, ...restMethods);
+}
+
+/**
+ * 防护检测：源文件 mount 对象内若残留 `__mod` 后缀方法，且同时通过 require 引入了
+ * 工具方法依赖，则禁止编码。
+ *
+ * 场景：用户把 decode 产物（含未还原的 `validate__util` 等内联方法）复制为 index.js
+ * 进行二开，同时又保留了 `const util = require(...)`。此时若继续 encode，会导致
+ * 方法重复定义、mod.map 错乱。应提示用户移除 require 引入，只做无依赖编码。
+ *
+ * @param inPath - 源文件路径
+ * @param entry - 入口对象名
+ * @param config - 主配置
+ * @returns 错误提示字符串（检测到连规时返回，未连规返回 null）
+ */
+function guardInlinedModMethods(
+  inPath: string,
+  entry: string,
+  config: MainConfig
+): string | null {
+  const srcAst = parseSrcAst(inPath);
+  if (!srcAst) {
+    return null;
+  }
+  const inlinedNames = getInlinedModMethodNames(srcAst, entry);
+  if (!inlinedNames.length) {
+    return null;
+  }
+  // 检测是否存在 require 引入的工具方法依赖
+  const rootDir = config.encode.useAlias
+    ? getParentRootDir() || config.baseDir
+    : undefined;
+  const requireModPaths = getRequireModPaths(
+    path.dirname(inPath),
+    srcAst,
+    undefined,
+    rootDir
+  );
+  if (!requireModPaths.size) {
+    // 有 __mod 方法但无 require 依赖：允许无依赖编码
+    return null;
+  }
+  const depNames = [...requireModPaths.keys()];
+  return (
+    `检测到源文件 mount 对象内残留工具方法后缀（${inlinedNames.join(
+      ", "
+    )}），` +
+    `同时存在 require 依赖引入（${depNames.join(
+      ", "
+    )}）。\n` +
+    `此场景不允许编码：请移除源文件中的 require 工具方法引入（${depNames
+      .map((n) => `const ${n} = require(...)`)
+      .join("; ")}），` +
+    `仅保留 mount 对象内的 __mod 后缀方法做无依赖编码；` +
+    `或将 __mod 后缀方法抽为独立工具文件后再 encode。`
+  );
 }
