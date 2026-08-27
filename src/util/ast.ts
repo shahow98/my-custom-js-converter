@@ -63,9 +63,19 @@ function fixMisplacedLineComments(code: string): string {
 export function outputObjectMethods(outPath: string, methods: ObjectMethod[]) {
   let dist = methods
     .map((m) => {
-      // 保留 leadingComments：原代码会删除方法前置注释，但 Babel 会把上一个方法/属性
-      // 的行尾注释挂到当前方法的 leadingComments，删除会导致这些注释丢失。
-      // 改由 fixMisplacedLineComments 在生成后修正错位。
+      // 区分处理 leadingComments：
+      // - CommentBlock（/** ... */ JSDoc）：属于方法自身的文档注释，encode 扁平化时应删除。
+      // - CommentLine（// ...）：Babel 会把上一属性/方法的行尾注释错挂到当前方法的
+      //   leadingComments，删除会导致行尾注释丢失，因此保留，交由 fixMisplacedLineComments
+      //   在生成后还原到上一属性行尾。
+      if (m.leadingComments?.length) {
+        m.leadingComments = m.leadingComments.filter(
+          (c) => c.type === "CommentLine"
+        );
+        if (!m.leadingComments.length) {
+          m.leadingComments = undefined;
+        }
+      }
       return m;
     })
     .map((m) => generate(m))
