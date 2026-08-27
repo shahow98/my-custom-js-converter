@@ -12,7 +12,7 @@ import { config } from "../config";
 import { MainConfig } from "../config/main_config";
 import { MapContext } from "../context/map_context";
 import { scanfCodeDirs, scanfCodeFiles, resolveLibDirs, scanfLibMod } from "../scanf";
-import { deleteModMethods, getUnknownDepNames, importMods } from "../util/ast";
+import { deleteModMethods, getUnknownDepNames, importMods, auditModMethods } from "../util/ast";
 import {
   writeVersion,
   incrementVersionValue,
@@ -123,7 +123,26 @@ async function decoding$0(
   }
 
   importMods(path.dirname(outPath), srcAst, mapContext, config.encode.useAlias);
-  deleteModMethods(srcAst, mapContext);
+
+  // 稽核内联工具方法体是否与源文件一致（忽略注释）
+  const mismatches = auditModMethods(srcAst, mapContext);
+  const skipMethodKeys = new Set<string>();
+  if (mismatches.length) {
+    logger.warn(
+      `检测到 ${mismatches.length} 个内联工具方法与源文件不一致，将保留其内联形态不还原:`
+    );
+    mismatches.forEach((m) => {
+      logger.warn(
+        `  - ${m.methodKey}（源文件: ${m.srcPath}）`
+      );
+      skipMethodKeys.add(m.methodKey);
+    });
+    logger.warn(
+      `请检查上述方法，确认 coded.js 与源文件差异后手动处理或重新 encode。`
+    );
+  }
+
+  deleteModMethods(srcAst, mapContext, skipMethodKeys);
 
   // 从onFormReady方法中提取版本日志并移除
   extractAndRemoveVersionLog(srcAst, settingDir);

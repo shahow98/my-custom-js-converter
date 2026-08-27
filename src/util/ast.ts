@@ -497,8 +497,16 @@ export function importMods(
 /**
  * 去除第三方模块方法
  * @param srcAst - 源码AST
+ * @param mapContext
+ * @param skipMethodKeys - 需要跳过（不删除、不还原）的方法完整名集合，
+ *   元素形如 `method__mod`。用于稽核出方法体不一致的工具方法：
+ *   保留其内联定义与 this.method__mod 调用，交由用户人工处理。
  */
-export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
+export function deleteModMethods(
+  srcAst: AstType,
+  mapContext: MapContext,
+  skipMethodKeys: Set<string> = new Set()
+) {
   const deps = new Set<string>();
   mapContext
     .getModNames()
@@ -515,6 +523,10 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
         return;
       }
       const depName = split.length ? split[split.length - 1] : "";
+      // 稽核不一致的方法：保留内联定义，不删除
+      if (skipMethodKeys.has(methodName)) {
+        return;
+      }
       deps.has(depName) && path.remove();
     }
   });
@@ -530,6 +542,10 @@ export function deleteModMethods(srcAst: AstType, mapContext: MapContext) {
       }
       const depName = split[split.length - 1];
       if (deps.has(depName)) {
+        // 稽核不一致的方法：保留 this.method__mod 调用形态，不还原
+        if (skipMethodKeys.has(methodName)) {
+          return;
+        }
         path.node.property.name = methodName.replace(`__${depName}`, "");
 
         if (types.isThisExpression(path.node.object)) {
@@ -636,4 +652,244 @@ export function getUnknownDepNames(
     }
   });
   return [...depNames];
+}
+
+/**
+ * 稽核结果：方法体不一致的工具方法
+ */
+export interface AuditMismatch {
+  /** 完整方法名，形如 `formatData__util` */
+  methodKey: string;
+  /** 原始方法名，形如 `formatData` */
+  methodName: string;
+  /** 依赖（模块）名，形如 `util` */
+  modName: string;
+  /** 源文件绝对路径（取不到时为空串） */
+  srcPath: string;
+}
+
+/**
+ * 递归清除节点及其子树上所有 comments 字段（leading/inner/trailing），
+ * 用于“忽略注释”的代码比对。
+ */
+function stripCommentsDeep(node: Node) {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  // 处理数组节点
+  if (Array.isArray(node)) {
+    node.forEach((child) => stripCommentsDeep(child as Node));
+    return;
+  }
+  const n = node as any;
+  n.leadingComments = null;
+  n.innerComments = null;
+  n.trailingComments = null;
+  for (const key of Object.keys(n)) {
+    const val = n[key];
+    if (val && typeof val === "object") {
+      stripCommentsDeep(val as Node);
+    }
+  }
+}
+
+/**
+ * 生成节点的归一化代码：去注释 + generate + 压缩空白/换行，
+ * 使仅注释或排版差异的代码视为相同。
+ */
+function normalizeNodeCode(node: Node): string {
+  // 克隆避免污染原 AST
+  const cloned = JSON.parse(JSON.stringify(node)) as Node;
+  stripCommentsDeep(cloned);
+  const { code } = generate(cloned, { compact: true });
+  // 压缩连续空白与换行，统一比较基准
+  return code.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 对单个克隆的方法节点，在其方法体内应用与 encode `modifyObjectMethods`
+ * （非 root 分支）一致的调用重命名，使其与 coded.js 内联方法体可比对：
+ *   - `this.method`（method 属于该 mod 自身方法集）→ `this.method__entry`
+ *   - `dep.method`（dep 属于 mod.dependencies 且 method 在 dep.methods）→ `this.method__dep`
+ * 同时把方法 key 由 `method` 重命名为 `method__entry`。
+ *
+ * 注意：仅作用于传入的方法节点子树，不污染原 AST（调用方需传入克隆节点）。
+ */
+function renameCallsInsideMethod(
+  methodNode: ObjectMethod,
+  entry: string,
+  selfMethods: string[],
+  deps: { name: string; methods: string[] }[]
+) {
+  // 重命名方法 key：method → method__entry
+  if (types.isIdentifier(methodNode.key)) {
+    methodNode.key.name = `${methodNode.key.name}__${entry}`;
+  }
+  // 在方法体内遍历 MemberExpression 做调用重命名
+  // 使用 path 作用域限定在该方法节点内
+  const selfSet = new Set(selfMethods);
+  const depMap = new Map<string, Set<string>>();
+  deps.forEach((d) => depMap.set(d.name, new Set(d.methods)));
+
+  // 手动遍历方法体（避免引入完整 traverse 的作用域问题）
+  const visit = (node: any) => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((child) => visit(child));
+      return;
+    }
+    if (types.isMemberExpression(node)) {
+      // this.method → this.method__entry（method 属于自身方法集）
+      if (
+        types.isThisExpression(node.object) &&
+        types.isIdentifier(node.property) &&
+        selfSet.has(node.property.name)
+      ) {
+        node.property.name = `${node.property.name}__${entry}`;
+      }
+      // dep.method → this.method__dep
+      if (
+        types.isIdentifier(node.object) &&
+        types.isIdentifier(node.property) &&
+        depMap.has(node.object.name) &&
+        depMap.get(node.object.name)!.has(node.property.name)
+      ) {
+        const depName = node.object.name;
+        node.object = types.thisExpression();
+        node.property.name = `${node.property.name}__${depName}`;
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "range") {
+        continue;
+      }
+      const val = node[key];
+      if (val && typeof val === "object") {
+        visit(val);
+      }
+    }
+  };
+  visit(methodNode);
+}
+
+/**
+ * 稽核 coded.js 中内联工具方法的方法体是否与源文件一致（忽略注释）。
+ *
+ * 比对基准：对源文件中对应方法应用与 encode 一致的重命名后，生成归一化代码，
+ * 与 coded.js 内联方法体的归一化代码比对。若不一致，说明 coded.js 被手动修改
+ * 或源文件已漂移，应跳过该方法的 decode（保留内联定义与 this.method__mod 调用）。
+ *
+ * @param srcAst - coded.js 的 AST（已包裹为 mount 对象）
+ * @param mapContext - mod.map 上下文
+ * @returns 不一致的方法列表
+ */
+export function auditModMethods(
+  srcAst: AstType,
+  mapContext: MapContext
+): AuditMismatch[] {
+  const mismatches: AuditMismatch[] = [];
+  // 所有已知依赖名并集（与 deleteModMethods 一致）
+  const deps = new Set<string>();
+  mapContext
+    .getModNames()
+    .flatMap((name) => Object.keys(mapContext.getMod(name)?.dependencies!))
+    .forEach((dep) => deps.add(dep));
+
+  // 缓存源文件 AST，避免重复解析
+  const srcAstCache = new Map<string, AstType>();
+  const getSrcAst = (modName: string): AstType => {
+    if (srcAstCache.has(modName)) {
+      return srcAstCache.get(modName)!;
+    }
+    const srcPath = mapContext.getAbsoluteSrcPathByMod(modName);
+    const ast = srcPath ? parseSrcAst(srcPath) : undefined;
+    srcAstCache.set(modName, ast);
+    return ast;
+  };
+
+  traverse(srcAst as Node, {
+    ObjectMethod(path) {
+      if (!types.isIdentifier(path.node.key)) {
+        return;
+      }
+      const fullMethodName = path.node.key.name;
+      const split = fullMethodName.split("__");
+      if (split.length < 2) {
+        return;
+      }
+      const depName = split[split.length - 1];
+      if (!deps.has(depName)) {
+        return;
+      }
+      // 原始方法名：去掉 __depName 后缀
+      const originalName = fullMethodName.slice(
+        0,
+        fullMethodName.length - depName.length - 2
+      );
+
+      const srcPath = mapContext.getAbsoluteSrcPathByMod(depName);
+      const depSrcAst = getSrcAst(depName);
+      if (!depSrcAst || !srcPath) {
+        // 源文件不可读，无法稽核，跳过（不视为不一致）
+        return;
+      }
+
+      // 从源文件取出对应方法节点
+      const srcMethods = getObjectMethodsByEntryAndMethodNames(
+        depSrcAst,
+        depName,
+        [originalName]
+      );
+      if (!srcMethods.length) {
+        // 源文件中找不到该方法，视为不一致（源文件已变更）
+        mismatches.push({
+          methodKey: fullMethodName,
+          methodName: originalName,
+          modName: depName,
+          srcPath
+        });
+        return;
+      }
+
+      // 克隆源方法节点，应用 encode 重命名，归一化
+      // 自身方法集取源文件中该 entry 对象的所有方法名（与 encode modifyObjectMethods 一致），
+      // 而非 mod.map 的引用集（补充依赖场景下引用集可能为空）
+      const allSrcMethods = getObjectMethodsByEntryAndMethodNames(depSrcAst, depName);
+      const selfMethodNames = getObjectMethodNames(allSrcMethods);
+      const srcCloned = JSON.parse(JSON.stringify(srcMethods[0])) as ObjectMethod;
+      const mod = mapContext.getMod(depName);
+      const depEntries = mod
+        ? Object.keys(mod.dependencies).map((name) => ({
+            name,
+            methods: mod.dependencies[name].methods
+          }))
+        : [];
+      renameCallsInsideMethod(
+        srcCloned,
+        depName,
+        selfMethodNames,
+        depEntries
+      );
+      const srcNormalized = normalizeNodeCode(srcCloned);
+
+      // coded.js 内联方法节点归一化（直接比对，已是重命名后形态）
+      const codedCloned = JSON.parse(
+        JSON.stringify(path.node)
+      ) as ObjectMethod;
+      const codedNormalized = normalizeNodeCode(codedCloned);
+
+      if (srcNormalized !== codedNormalized) {
+        mismatches.push({
+          methodKey: fullMethodName,
+          methodName: originalName,
+          modName: depName,
+          srcPath
+        });
+      }
+    }
+  });
+
+  return mismatches;
 }
