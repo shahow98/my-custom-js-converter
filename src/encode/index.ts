@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from "path";
-import { scanfCodeFiles, scanfCodeDirs } from "../scanf";
+import { scanfCodeFiles, scanfCodeDirs, resolveLibDirs, scanfLibMod } from "../scanf";
 import { config } from "../config";
 import { ObjectMethod, Identifier } from "@babel/types";
 import { MainConfig } from "../config/main_config";
@@ -192,16 +192,23 @@ function reorderMethods(methods: ObjectMethod[]): void {
 
 /**
  * 防护检测：源文件 mount 对象内若残留 `__mod` 后缀方法，且同时通过 require 引入了
- * 工具方法依赖，则禁止编码。
+ * 工具方法依赖，则按场景区分处理：
  *
- * 场景：用户把 decode 产物（含未还原的 `validate__util` 等内联方法）复制为 index.js
- * 进行二开，同时又保留了 `const util = require(...)`。此时若继续 encode，会导致
- * 方法重复定义、mod.map 错乱。应提示用户移除 require 引入，只做无依赖编码。
+ * 场景 A（真篡改风险）：`__mod` 后缀方法对应的 mod 名能在 libs 目录找到独立模块文件。
+ *   说明用户复用了 decode 产物（含未还原的 `validate__util` 等内联 lib 方法）作为二开源文件，
+ *   同时又保留了 `const util = require(...)`。此时若继续 encode，会导致方法重复定义、
+ *   mod.map 错乱。应拒绝编码，提示用户移除 require 引入或抽为独立工具文件。
+ *
+ * 场景 B（用户自带 `__xxx` 命名，非 lib 模块）：所有 `__mod` 后缀方法对应的 mod 名
+ *   在 libs 目录均无匹配文件（如 `__getTable`、`__datetimeFormatter` 是用户私有命名，
+ *   非 lib 内模块）。此场景不会导致 lib 方法对原方法覆盖，encode 应放行编译，仅给出警告
+ *   提示（与 decode 的「未找到依赖文件」提示语义一致）。
  *
  * @param inPath - 源文件路径
  * @param entry - 入口对象名
  * @param config - 主配置
- * @returns 错误提示字符串（检测到连规时返回，未连规返回 null）
+ * @returns 错误提示字符串（场景 A 时返回，阻止编码）；场景 B 时返回 null 并已打印警告；
+ *   无违规返回 null
  */
 function guardInlinedModMethods(
   inPath: string,
@@ -231,13 +238,52 @@ function guardInlinedModMethods(
     return null;
   }
   const depNames = [...requireModPaths.keys()];
+
+  // 解析每个内联后缀方法名对应的 mod 名（取 split("__") 最后一段，与
+  // getUnknownDepNames / deleteModMethods 的解析逻辑保持一致）。
+  const modNames = new Set<string>();
+  inlinedNames.forEach((name) => {
+    const split = name.split("__");
+    if (split.length >= 2) {
+      const modName = split[split.length - 1];
+      if (modName) {
+        modNames.add(modName);
+      }
+    }
+  });
+
+  // 在 libs 目录搜索每个 mod 名是否存在独立模块文件，据此区分场景 A / B。
+  // 复用 decode 侧同一套 resolveLibDirs + scanfLibMod，保证两端判定一致。
+  const libDirs = resolveLibDirs(config.libs, config.baseDir, rootDir);
+  const libMods: string[] = []; // 在 libs 有匹配的 mod 名（场景 A）
+  modNames.forEach((modName) => {
+    const candidates = scanfLibMod(libDirs, modName);
+    if (candidates.length) {
+      libMods.push(modName);
+    }
+  });
+
+  // 场景 B：所有疑似后缀方法对应的 mod 名在 libs 均无匹配（非 lib 模块，多为用户自带
+  // `__xxx` 命名）。不会导致 lib 方法覆盖原方法，放行编译，仅警告提示。
+  if (!libMods.length) {
+    logger.warn(
+      `源文件 mount 对象内存在疑似 __mod 后缀方法（${inlinedNames.join(
+        ", "
+      )}），但对应模块在 libs 目录均无匹配，判定为非 lib 模块命名，放行编码。` +
+        `同时存在 require 依赖引入（${depNames.join(
+          ", "
+        )}）。若上述方法确为 lib 内联方法，请确认 libs 配置或手动处理。`
+    );
+    return null;
+  }
+
+  // 场景 A：存在能在 libs 找到独立模块文件的内联后缀方法（真篡改风险），拒绝编码。
   return (
     `检测到源文件 mount 对象内残留工具方法后缀（${inlinedNames.join(
       ", "
     )}），` +
-    `同时存在 require 依赖引入（${depNames.join(
-      ", "
-    )}）。\n` +
+    `其中 ${libMods.join(", ")} 在 libs 目录存在对应模块文件，` +
+    `同时存在 require 依赖引入（${depNames.join(", ")}）。\n` +
     `此场景不允许编码：请移除源文件中的 require 工具方法引入（${depNames
       .map((n) => `const ${n} = require(...)`)
       .join("; ")}），` +
