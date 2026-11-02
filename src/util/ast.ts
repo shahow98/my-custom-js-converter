@@ -697,13 +697,44 @@ function stripCommentsDeep(node: Node) {
 }
 
 /**
- * 生成节点的归一化代码：去注释 + generate + 压缩空白/换行，
- * 使仅注释或排版差异的代码视为相同。
+ * 递归统一字符串字面量的引号风格（统一为双引号）。
+ * 通过重写 extra.raw 让 generate 输出统一引号，使仅引号风格差异的代码视为相同。
+ * 仅处理 StringLiteral：方法体节点内不存在 DirectiveLiteral（'use strict' 只在 Program 级）
+ * 与 JSX 属性（parse 未启用 jsx 插件），无需处理。
+ */
+function normalizeStringQuotesDeep(node: Node) {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((child) => normalizeStringQuotesDeep(child as Node));
+    return;
+  }
+  const n = node as any;
+  if (types.isStringLiteral(n)) {
+    // 统一为 JSON.stringify 生成的双引号 raw（含转义），忽略原引号风格
+    n.extra = { raw: JSON.stringify(n.value) };
+  }
+  for (const key of Object.keys(n)) {
+    if (key === "loc" || key === "start" || key === "end" || key === "range") {
+      continue;
+    }
+    const val = n[key];
+    if (val && typeof val === "object") {
+      normalizeStringQuotesDeep(val as Node);
+    }
+  }
+}
+
+/**
+ * 生成节点的归一化代码：去注释 + 统一字符串引号 + generate + 压缩空白/换行，
+ * 使仅注释、排版或字符串引号风格差异的代码视为相同。
  */
 function normalizeNodeCode(node: Node): string {
   // 克隆避免污染原 AST
   const cloned = JSON.parse(JSON.stringify(node)) as Node;
   stripCommentsDeep(cloned);
+  normalizeStringQuotesDeep(cloned);
   const { code } = generate(cloned, { compact: true });
   // 压缩连续空白与换行，统一比较基准
   return code.replace(/\s+/g, " ").trim();
